@@ -1,0 +1,9 @@
+{
+  "appId": "app.pocco.display",
+  "appName": "Pocco Display",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

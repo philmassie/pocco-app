@@ -1,0 +1,11 @@
+# Installed JavaScript dependencies
+node_modules/
+
+# IDE-local files
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+_del
+.venv

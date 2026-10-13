@@ -148,11 +148,11 @@
     if (g.key === "egt")
       marks += `<line class="cooltick" x1="100" y1="${cy - radius - 7}" x2="100" y2="${cy - radius + 7}" visibility="hidden"/>`;
     const trend = g.trendThr ? `<g class="trend" visibility="hidden" transform="translate(${100 + 25} ${valueY - 6})"><polygon points="0,-4.5 4.5,3.5 -4.5,3.5"/></g>` : "";
-    const dialLabelY = g.key === "coolant" ? 151 : 55;
+    const dialLabelY = g.key === "coolant" ? 148 : 55;
     const dialLabelMarkup = g.key === "coolant"
       ? `<g class="dial-coolant-icon" transform="translate(100 ${dialLabelY})">${coolantIcon.outerHTML}</g>`
       : g.key === "oil"
-        ? `<svg class="dial-oil-icon" x="78" y="46" width="44" height="20.3" viewBox="0 0 732 338" aria-hidden="true"><g fill="currentColor" fill-rule="evenodd"><path d="M42,32 L176,76 L176,105 L376,105 L406,137 L636,75 L668,108 L645,132 L627,115 L585,125 L445,285 L142,285 L142,165 L22,130 Z M65,78 L140,98 L140,126 L65,104 Z M178,138 L362,138 L396,175 L527,140 L432,250 L178,250 Z"/><path d="M230,35 H330 V70 H297 V105 H262 V70 H230 Z"/><path d="M655,187 C650,206 629,224 629,243 A26,26 0 0 0 681,243 C681,224 660,206 655,187 Z"/></g></svg>`
+        ? `<svg class="dial-oil-icon" x="81" y="46" width="44" height="20.3" viewBox="0 0 732 338" aria-hidden="true"><g fill="currentColor" fill-rule="evenodd"><path d="M42,32 L176,76 L176,105 L376,105 L406,137 L636,75 L668,108 L645,132 L627,115 L585,125 L445,285 L142,285 L142,165 L22,130 Z M65,78 L140,98 L140,126 L65,104 Z M178,138 L362,138 L396,175 L527,140 L432,250 L178,250 Z"/><path d="M230,35 H330 V70 H297 V105 H262 V70 H230 Z"/><path d="M655,187 C650,206 629,224 629,243 A26,26 0 0 0 681,243 C681,224 660,206 655,187 Z"/></g></svg>`
         : `<text class="nm" x="100" y="${combined ? dialLabelY : 60}">${g.name}</text>`;
     const markup =
       dialLabelMarkup +
@@ -164,11 +164,11 @@
       `<text class="val" x="100" y="${valueY}">--</text>` +
       `<text class="unit" x="100" y="${unitY}">${g.unit}</text>${trend}`;
     const singleGaugeMarkup = spec
-      ? `<g transform="translate(0 -19)"><g transform="translate(100 55) scale(${gaugeScale}) translate(-100 -55)">${markup}</g></g>`
+      ? `<g transform="translate(0 -14)"><g transform="translate(100 55) scale(${gaugeScale}) translate(-100 -55)">${markup}</g></g>`
       : markup;
     // --- added: "safe to shut down" strip in the free space below the EGT dial
     const coolStrip = g.key === "egt"
-      ? `<g id="cool"><rect class="cool-bg" x="22" y="90" width="156" height="36" rx="9"/><text class="cool-main" id="coolMain" x="100" y="105.5">EGT: waiting</text><text class="cool-sub" id="coolSub" x="100" y="118"></text></g>` : "";
+      ? `<g id="cool"><rect class="cool-bg" x="22" y="95" width="156" height="36" rx="9"/><text class="cool-main" id="coolMain" x="100" y="110.5">EGT: waiting</text><text class="cool-sub" id="coolSub" x="100" y="123"></text></g>` : "";
     el.innerHTML = combined ? markup : `<svg viewBox="0 0 200 170" preserveAspectRatio="xMidYMid meet">${singleGaugeMarkup}${coolStrip}</svg>`;
     (combined ? comboSvg : grid).appendChild(el);
     g.el = el; g.needle = el.querySelector(".needle"); g.valEl = el.querySelector(".val");
@@ -221,54 +221,88 @@
     g.trEl.querySelector("polygon").setAttribute("transform", s > 0 ? "" : "rotate(180)");
     g.trEl.setAttribute("visibility", "visible");
   }
-  function renderGauge(g) {
-    const raw = latest[g.id];
+  function renderGauge(gauge) {
+    const raw = latest[gauge.id];
     if (raw === undefined) return;
-    const n = parseFloat(raw);
-    if (!isFinite(n)) { g.valEl.textContent = String(raw); return; }
-    g.valEl.textContent = n.toFixed(g.dp);
-    const spec = comboSpecs[g.id];
-    g.needle.setAttribute("transform", `rotate(${gaugeAngle(g, n).toFixed(1)} 100 ${spec.cy})`);
-    const gated = g.key === "oil" && !oilArm.armed;     // engine not running yet: no oil alarm colours
-    const l = gated ? 0 : level(g, n);
-    status[g.key] = l;
-    g.el.classList.remove("ca", "al", "na");
-    if (l === 1) g.el.classList.add("ca"); else if (l === 2) g.el.classList.add("al");
-    if (gated) g.el.classList.add("na");
-    setMarker(g.pkEl, g, ext[g.key].max);
-    if (g.mnEl) setMarker(g.mnEl, g, ext.oil.min);
-    renderTrend(g);
+    const value = parseFloat(raw);
+    if (!isFinite(value)) {
+      gauge.valEl.textContent = String(raw);
+      return;
+    }
+
+    gauge.valEl.textContent = value.toFixed(gauge.dp);
+    const spec = comboSpecs[gauge.id];
+    gauge.needle.setAttribute("transform", `rotate(${gaugeAngle(gauge, value).toFixed(1)} 100 ${spec.cy})`);
+
+    const alarmsEnabled = gauge.key !== "oil" || oilArm.armed;
+    const severity = alarmsEnabled ? level(gauge, value) : 0;
+    status[gauge.key] = severity;
+    gauge.el.classList.remove("ca", "al", "na");
+    if (severity === 1) gauge.el.classList.add("ca");
+    else if (severity === 2) gauge.el.classList.add("al");
+    if (!alarmsEnabled) gauge.el.classList.add("na");
+
+    setMarker(gauge.pkEl, gauge, ext[gauge.key].max);
+    if (gauge.mnEl) setMarker(gauge.mnEl, gauge, ext.oil.min);
+    renderTrend(gauge);
   }
+
   function renderBattery() {
-    const g = G.battery, raw = latest[g.id]; if (raw === undefined) return;
-    const n = parseFloat(raw);
-    batteryVoltage.textContent = isFinite(n) ? n.toFixed(1) + " V" : "--.- V";
-    const l = isFinite(n) ? level(g, n) : 0; status.battery = l;
-    batteryIndicator.setAttribute("class", "indicator " + (isFinite(n) ? ["ok", "ca", "al"][l] : "unknown") + (l === 2 ? " flash" : ""));
+    const gauge = G.battery;
+    const raw = latest[gauge.id];
+    if (raw === undefined) return;
+
+    const value = parseFloat(raw);
+    batteryVoltage.textContent = isFinite(value) ? value.toFixed(1) + " V" : "--.- V";
+    const severity = isFinite(value) ? level(gauge, value) : 0;
+    status.battery = severity;
+    const state = isFinite(value) ? ["ok", "ca", "al"][severity] : "unknown";
+    batteryIndicator.setAttribute("class", "indicator " + state + (severity === 2 ? " flash" : ""));
   }
+
   function renderLevel(now) {
-    const raw = latest[IDS.level]; if (raw === undefined) return;
-    const n = parseFloat(raw), bad = levelDb.update(now, isFinite(n) && levelBad(n));
-    status.level = bad ? 2 : 0;
-    levelIndicator.setAttribute("class", "indicator " + (isFinite(n) ? (bad ? "al flash" : "ok") : "unknown"));
+    const raw = latest[IDS.level];
+    if (raw === undefined) return;
+
+    const value = parseFloat(raw);
+    const lowCoolant = levelDb.update(now, isFinite(value) && levelBad(value));
+    status.level = lowCoolant ? 2 : 0;
+    const state = !isFinite(value) ? "unknown" : lowCoolant ? "al flash" : "ok";
+    levelIndicator.setAttribute("class", "indicator " + state);
   }
+
   function renderCool(stale) {
-    const el = $("cool"), n = num(IDS.egt);
-    if (!el) return;
-    if (stale || !isFinite(n)) { el.setAttribute("class", ""); $("coolMain").textContent = stale ? "NO DATA" : "EGT: waiting"; $("coolSub").textContent = ""; return; }
-    const hot = n >= SET.cooldownC;
-    el.setAttribute("class", hot ? "hot" : "safe");
-    $("coolMain").textContent = hot ? "HOT – IDLE TO COOL" : "SAFE TO SHUT DOWN";
+    const strip = $("cool");
+    const egt = num(IDS.egt);
+    if (!strip) return;
+
+    if (stale || !isFinite(egt)) {
+      strip.setAttribute("class", "");
+      $("coolMain").textContent = stale ? "NO DATA" : "EGT: waiting";
+      $("coolSub").textContent = "";
+      return;
+    }
+
+    const tooHotToStop = egt >= SET.cooldownC;
+    strip.setAttribute("class", tooHotToStop ? "hot" : "safe");
+    $("coolMain").textContent = tooHotToStop ? "HOT – IDLE TO COOL" : "SAFE TO SHUT DOWN";
     $("coolSub").textContent = "EGT limit " + SET.cooldownC + " °C";
   }
+
   function renderAll(now) {
     GAUGES.forEach(renderGauge);
-    renderBattery(); renderLevel(now); renderCool(false);
+    renderBattery();
+    renderLevel(now);
+    renderCool(false);
     // combo tile border follows the worst of coolant, oil and level; EGT tile follows EGT
     const sev = Math.max(status.coolant, status.oil, status.level);
     comboTile.classList.toggle("alert-ca", sev === 1);
     comboTile.classList.toggle("alert-al", sev === 2);
-    if (egtTile) { egtTile.classList.remove("ca", "al"); if (status.egt === 1) egtTile.classList.add("ca"); else if (status.egt === 2) egtTile.classList.add("al"); }
+    if (egtTile) {
+      egtTile.classList.remove("ca", "al");
+      if (status.egt === 1) egtTile.classList.add("ca");
+      else if (status.egt === 2) egtTile.classList.add("al");
+    }
   }
   function fmtClock(v) {
     const s = String(v); if (s.indexOf(":") >= 0) return s;
@@ -279,54 +313,106 @@
   // ================================================================ frames
   // ASSUMPTION: the clock is either a ready-made "m:ss" string or a number of seconds. A drop of more than 5 s
   // is taken as "the POCCO+ restarted its session" and starts a new log file and clears peaks.
-  function handleClock(v) {
-    const cs = L.clockSeconds(v);
-    if (isFinite(cs)) {
-      if (isFinite(clockSec) && cs < clockSec - 5) restartSession("timer restarted");
-      if (!isFinite(clockSec) || cs !== clockSec) { lastClockMove = Date.now(); if (waitClock && cs !== clockAtEnd) waitClock = false; }
-      clockSec = cs;
+  function handleClock(value) {
+    const seconds = L.clockSeconds(value);
+    if (isFinite(seconds)) {
+      if (isFinite(clockSec) && seconds < clockSec - 5) restartSession("timer restarted");
+      if (!isFinite(clockSec) || seconds !== clockSec) {
+        lastClockMove = Date.now();
+        if (waitClock && seconds !== clockAtEnd) waitClock = false;
+      }
+      clockSec = seconds;
     }
-    $("clock").textContent = fmtClock(v);
+    $("clock").textContent = fmtClock(value);
   }
-  function onFrame(d) {
+
+  function onFrame(frame) {
     const now = Date.now(); lastRx = now;
-    if (!paused) { rawLog.push(new Date().toISOString().slice(11, 23) + "  " + JSON.stringify(d)); if (rawLog.length > 40) rawLog.shift(); }
-    if (d && d.command === "update:components" && Array.isArray(d.widgets)) {
+    if (!paused) {
+      rawLog.push(new Date().toISOString().slice(11, 23) + "  " + JSON.stringify(frame));
+      if (rawLog.length > 40) rawLog.shift();
+    }
+    if (frame && frame.command === "update:components" && Array.isArray(frame.widgets)) {
       let hasClock = false;
-      d.widgets.forEach(w => { latest[w.id] = w.v; if (w.id === IDS.clock) hasClock = true; if (!KNOWN.has(w.id)) unknown[w.id] = w.v; });
+      frame.widgets.forEach(widget => {
+        latest[widget.id] = widget.v;
+        if (widget.id === IDS.clock) hasClock = true;
+        if (!KNOWN.has(widget.id)) unknown[widget.id] = widget.v;
+      });
       if (hasClock) handleClock(latest[IDS.clock]);
       if (!sessionOpen && !waitClock) beginSession();
       oilArm.update(now, num(IDS.oil), num(IDS.coolant));
-      ["coolant", "oil", "egt"].forEach(k => {
-        const n = num(G[k].id); if (!isFinite(n)) return;
-        const e = ext[k]; if (e.max == null || n > e.max) e.max = n;
-        if (k === "oil" && oilArm.armed && (e.min == null || n < e.min)) e.min = n;
-        if (trends[k]) trends[k].add(now, n);
+      ["coolant", "oil", "egt"].forEach(key => {
+        const value = num(G[key].id);
+        if (!isFinite(value)) return;
+
+        const extremes = ext[key];
+        if (extremes.max == null || value > extremes.max) extremes.max = value;
+        if (key === "oil" && oilArm.armed && (extremes.min == null || value < extremes.min)) {
+          extremes.min = value;
+        }
+        if (trends[key]) trends[key].add(now, value);
       });
       renderAll(now);
-    } else if (d && d.command && !cmds[d.command]) cmds[d.command] = JSON.stringify(d);
+    } else if (frame && frame.command && !cmds[frame.command]) {
+      cmds[frame.command] = JSON.stringify(frame);
+    }
   }
 
   // ================================================================ GPS
   let fix = null, gpsState = "starting", gpsWatch = null, gpsMsg = "";
   function startGps() {
-    if (demo) { gpsState = "demo"; return; }
-    if (!navigator.geolocation) { gpsState = "unsupported"; return; }
+    if (demo) {
+      gpsState = "demo";
+      return;
+    }
+    if (!navigator.geolocation) {
+      gpsState = "unsupported";
+      return;
+    }
+
     try {
       if (gpsWatch != null) navigator.geolocation.clearWatch(gpsWatch);
       gpsState = "starting";
-      gpsWatch = navigator.geolocation.watchPosition(p => {
-        const c = p.coords;
-        fix = { lat: c.latitude, lon: c.longitude, acc: c.accuracy, speed: c.speed, heading: c.heading, alt: c.altitude, ts: p.timestamp };
+      gpsWatch = navigator.geolocation.watchPosition(position => {
+        const coordinates = position.coords;
+        fix = {
+          lat: coordinates.latitude,
+          lon: coordinates.longitude,
+          acc: coordinates.accuracy,
+          speed: coordinates.speed,
+          heading: coordinates.heading,
+          alt: coordinates.altitude,
+          ts: position.timestamp,
+        };
         gpsState = "fix";
-      }, e => { gpsState = e.code === 1 ? "denied" : e.code === 3 ? "timeout" : "nofix"; gpsMsg = e.message || ""; },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-    } catch (e) { gpsState = "error"; gpsMsg = String(e.message || e); }
+      }, error => {
+        gpsState = error.code === 1 ? "denied" : error.code === 3 ? "timeout" : "nofix";
+        gpsMsg = error.message || "";
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    } catch (error) {
+      gpsState = "error";
+      gpsMsg = String(error.message || error);
+    }
   }
+
   function gpsChipText(now) {
     if (gpsState === "demo") return ["GPS demo", "good"];
-    if (gpsState === "fix") return (now - fix.ts) > 10000 ? ["GPS stale", "warn"] : ["GPS ±" + Math.round(fix.acc) + " m", "good"];
-    return [{ starting: "GPS …", unsupported: "GPS n/a", denied: "GPS denied", timeout: "GPS no fix", nofix: "GPS no fix", error: "GPS error" }[gpsState] || "GPS ?", "warn"];
+    if (gpsState === "fix") {
+      return now - fix.ts > 10000
+        ? ["GPS stale", "warn"]
+        : ["GPS ±" + Math.round(fix.acc) + " m", "good"];
+    }
+
+    const labels = {
+      starting: "GPS …",
+      unsupported: "GPS n/a",
+      denied: "GPS denied",
+      timeout: "GPS no fix",
+      nofix: "GPS no fix",
+      error: "GPS error",
+    };
+    return [labels[gpsState] || "GPS ?", "warn"];
   }
 
   // ================================================================ logging (IndexedDB, falls back to memory)
@@ -532,36 +618,89 @@
   // ================================================================ websocket / demo
   const enc = new TextEncoder();
   const PING = Uint8Array.from([0x81, 0xa7, ...enc.encode("command"), 0xa4, ...enc.encode("ping")]); // {"command":"ping"}
-  function setStatus(txt, ok) { $("status").textContent = txt; $("bar").className = ok ? "ok" : ""; }
+  function setStatus(text, connectedOk) {
+    $("status").textContent = text;
+    $("bar").className = connectedOk ? "ok" : "";
+  }
+
   function connect() {
     setStatus("connecting…", false);
-    let ws, timer;
-    try { ws = new WebSocket(url); } catch (e) { setStatus("bad URL", false); return; }
-    ws.binaryType = "arraybuffer";
-    ws.onopen = () => { connected = true; setStatus("connected", true); timer = setInterval(() => { try { ws.send(PING); } catch (e) {} }, 5000); };
-    ws.onmessage = e => {
-      try { onFrame(typeof e.data === "string" ? JSON.parse(e.data) : unpack(e.data)); $("decErr").textContent = ""; }
-      catch (err) { $("decErr").textContent = "decode error: " + err.message; }
+    let socket, pingTimer;
+    try {
+      socket = new WebSocket(url);
+    } catch (error) {
+      setStatus("bad URL", false);
+      return;
+    }
+
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => {
+      connected = true;
+      setStatus("connected", true);
+      pingTimer = setInterval(() => {
+        try {
+          socket.send(PING);
+        } catch (error) {}
+      }, 5000);
     };
-    ws.onclose = () => { connected = false; clearInterval(timer); setStatus("disconnected, retrying…", false); setTimeout(connect, 2000); };
-    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+    socket.onmessage = event => {
+      try {
+        onFrame(typeof event.data === "string" ? JSON.parse(event.data) : unpack(event.data));
+        $("decErr").textContent = "";
+      } catch (error) {
+        $("decErr").textContent = "decode error: " + error.message;
+      }
+    };
+    socket.onclose = () => {
+      connected = false;
+      clearInterval(pingTimer);
+      setStatus("disconnected, retrying…", false);
+      setTimeout(connect, 2000);
+    };
+    socket.onerror = () => {
+      try {
+        socket.close();
+      } catch (error) {}
+    };
   }
+
   function startDemo() {
-    connected = true; setStatus("DEMO", true);
-    let t = 0, egt = 180;
+    connected = true;
+    setStatus("DEMO", true);
+    let elapsedSeconds = 0, egt = 180;
     setInterval(() => {
-      t += 0.5; const tt = t % 420;                              // a 7 minute "drive", then the session clock restarts
-      const warm = 1 - Math.exp(-tt / 150);
-      const load = (tt > 240 && tt < 330) ? 0 : 0.5 + 0.5 * Math.sin(tt / 20);   // back to idle at 240 s to show the cool-down strip
-      const oil = tt < 4 ? 0 : 4.3 - 2.2 * warm + 0.5 * load + (Math.random() - 0.5) * 0.06;
-      const cool = 45 + 45 * warm + 6 * Math.sin(tt / 70) + ((tt > 260 && tt < 290) ? 28 : 0);   // brief overheat so you can see caution/alarm
-      egt += ((150 + 520 * Math.pow(Math.max(load, 0), 1.4)) - egt) * 0.06;
-      const bat = (tt < 3 ? 12.1 : 13.9) - 0.5 * Math.sin(tt / 17);
-      const low = ((tt > 100 && tt < 101) ? 0.2 : 0) + ((tt > 330 && tt < 345) ? 0.3 : 0);   // a 1 s blip, then a real fault
-      fix = { lat: -25 + tt * 0.00005, lon: 25 + tt * 0.00007, acc: 5 + 3 * Math.sin(tt / 9), speed: load > 0 ? 8 + 6 * load : 0, heading: 90, alt: 1200, ts: Date.now() };
+      elapsedSeconds += 0.5;
+      const tripSeconds = elapsedSeconds % 420; // 7 minute "drive", then the session clock restarts
+      const warmup = 1 - Math.exp(-tripSeconds / 150);
+      const engineLoad = (tripSeconds > 240 && tripSeconds < 330)
+        ? 0
+        : 0.5 + 0.5 * Math.sin(tripSeconds / 20); // idle at 240 s shows the cool-down strip
+      const oil = tripSeconds < 4
+        ? 0
+        : 4.3 - 2.2 * warmup + 0.5 * engineLoad + (Math.random() - 0.5) * 0.06;
+      const coolant = 45 + 45 * warmup + 6 * Math.sin(tripSeconds / 70) +
+        ((tripSeconds > 260 && tripSeconds < 290) ? 28 : 0); // brief overheat for caution/alarm
+      egt += ((150 + 520 * Math.pow(Math.max(engineLoad, 0), 1.4)) - egt) * 0.06;
+      const battery = (tripSeconds < 3 ? 12.1 : 13.9) - 0.5 * Math.sin(tripSeconds / 17);
+      const coolantLevel = ((tripSeconds > 100 && tripSeconds < 101) ? 0.2 : 0) +
+        ((tripSeconds > 330 && tripSeconds < 345) ? 0.3 : 0); // 1 s blip, then sustained fault
+      fix = {
+        lat: -25 + tripSeconds * 0.00005,
+        lon: 25 + tripSeconds * 0.00007,
+        acc: 5 + 3 * Math.sin(tripSeconds / 9),
+        speed: engineLoad > 0 ? 8 + 6 * engineLoad : 0,
+        heading: 90,
+        alt: 1200,
+        ts: Date.now(),
+      };
       onFrame({ command: "update:components", widgets: [
-        { id: 2, v: oil.toFixed(2) }, { id: 3, v: cool.toFixed(2) }, { id: 4, v: low.toFixed(2) },
-        { id: 5, v: egt.toFixed(0) }, { id: 6, v: bat.toFixed(2) }, { id: 8, v: Math.floor(tt) }, { id: 99, v: "demo-unknown" },
+        { id: 2, v: oil.toFixed(2) },
+        { id: 3, v: coolant.toFixed(2) },
+        { id: 4, v: coolantLevel.toFixed(2) },
+        { id: 5, v: egt.toFixed(0) },
+        { id: 6, v: battery.toFixed(2) },
+        { id: 8, v: Math.floor(tripSeconds) },
+        { id: 99, v: "demo-unknown" },
       ] });
     }, 500);
   }
@@ -655,7 +794,10 @@
   };
   $("menuBtn").onclick = () => {
     buildEditors();
-    renderDebug(); renderMenuInfo(); renderSessions(); $("panel").classList.add("open");
+    renderDebug();
+    renderMenuInfo();
+    renderSessions();
+    $("panel").classList.add("open");
     refreshOutputFolder();
   };
   $("limits").addEventListener("input", previewThresholds);
@@ -682,46 +824,122 @@
     }
   };
   $("saveBtn").onclick = () => {
-    const r = readEditors(); if (r.err) { $("limErr").textContent = r.err; return; }
-    store.set("limits", JSON.stringify(r.lim)); store.set("settings", JSON.stringify(r.st));
-    store.set("url", $("urlIn").value.trim() || DEFAULT_URL); store.set("demo", $("demoIn").checked ? "1" : "0");
+    const result = readEditors();
+    if (result.err) {
+      $("limErr").textContent = result.err;
+      return;
+    }
+    store.set("limits", JSON.stringify(result.lim));
+    store.set("settings", JSON.stringify(result.st));
+    store.set("url", $("urlIn").value.trim() || DEFAULT_URL);
+    store.set("demo", $("demoIn").checked ? "1" : "0");
     location.reload();
   };
-  $("resetBtn").onclick = () => { store.del("url"); $("urlIn").value = DEFAULT_URL; };
-  $("resetLimBtn").onclick = () => { store.del("limits"); store.del("settings"); location.reload(); };
-  $("gpsBtn").onclick = () => { startGps(); setTimeout(renderMenuInfo, 1500); };
-  $("sessions").onclick = e => { const b = e.target.closest("button[data-sid]"); if (b) exportCsv(+b.dataset.sid, b.dataset.how); };
-  $("delLogsBtn").onclick = async () => { if (confirm("Delete ALL logged sessions on this device?")) { await log.flush(); await logStore.clear(); log.sid = null; log.needNew = true; renderSessions(); } };
-  $("pauseBtn").onclick = () => { paused = !paused; $("pauseBtn").textContent = paused ? "Resume log" : "Pause log"; };
-  $("copyBtn").onclick = () => { const t = $("raw"); t.select(); try { (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).catch(() => document.execCommand("copy")); } catch (e) { document.execCommand("copy"); } };
+  $("resetBtn").onclick = () => {
+    store.del("url");
+    $("urlIn").value = DEFAULT_URL;
+  };
+  $("resetLimBtn").onclick = () => {
+    store.del("limits");
+    store.del("settings");
+    location.reload();
+  };
+  $("gpsBtn").onclick = () => {
+    startGps();
+    setTimeout(renderMenuInfo, 1500);
+  };
+  $("sessions").onclick = event => {
+    const button = event.target.closest("button[data-sid]");
+    if (button) exportCsv(+button.dataset.sid, button.dataset.how);
+  };
+  $("delLogsBtn").onclick = async () => {
+    if (!confirm("Delete ALL logged sessions on this device?")) return;
+    await log.flush();
+    await logStore.clear();
+    log.sid = null;
+    log.needNew = true;
+    renderSessions();
+  };
+  $("pauseBtn").onclick = () => {
+    paused = !paused;
+    $("pauseBtn").textContent = paused ? "Resume log" : "Pause log";
+  };
+  $("copyBtn").onclick = () => {
+    const rawText = $("raw");
+    rawText.select();
+    try {
+      (navigator.clipboard ? navigator.clipboard.writeText(rawText.value) : Promise.reject())
+        .catch(() => document.execCommand("copy"));
+    } catch (error) {
+      document.execCommand("copy");
+    }
+  };
   // tap a gauge tile to clear its peak/low markers
-  comboTile.addEventListener("click", () => { ["coolant", "oil"].forEach(k => { ext[k].max = null; if ("min" in ext[k]) ext[k].min = null; }); renderAll(Date.now()); });
-  egtTile.addEventListener("click", () => { ext.egt.max = null; renderAll(Date.now()); });
+  comboTile.addEventListener("click", () => {
+    ["coolant", "oil"].forEach(key => {
+      ext[key].max = null;
+      if ("min" in ext[key]) ext[key].min = null;
+    });
+    renderAll(Date.now());
+  });
+  egtTile.addEventListener("click", () => {
+    ext.egt.max = null;
+    renderAll(Date.now());
+  });
 
   // ================================================================ timers
   setInterval(() => {
-    const now = Date.now(), stale = now - lastRx > 3000;
+    const now = Date.now();
+    const stale = now - lastRx > 3000;
     document.body.classList.toggle("stale", stale);
-    if (connected) $("status").textContent = stale ? "connected, no data" : demo ? "DEMO" : "connected";
-    renderLevel(now); renderCool(stale);
-    const g = gpsChipText(now); $("gpsChip").textContent = g[0]; $("gpsChip").className = "chip " + g[1];
-    $("recChip").style.display = (!stale && now - log.lastRow < 3000) ? "" : "none";
-    if (log.err) { $("logInfo").textContent = "log error"; $("logInfo").style.color = "var(--al)"; }
-    else if (now > infoUntil) $("logInfo").textContent = "";
-    if (sessionOpen) {
-      const idleMs = Math.max(5, SET.autoEndSec) * 1000, gap = now - lastRx, cg = isFinite(clockSec) ? now - lastClockMove : 0;
-      if (gap > idleMs) finishSession("no data");
-      else if (cg > idleMs) { waitClock = true; clockAtEnd = clockSec; finishSession("timer stopped"); }
+    if (connected) {
+      $("status").textContent = stale ? "connected, no data" : demo ? "DEMO" : "connected";
     }
+    renderLevel(now);
+    renderCool(stale);
+
+    const gpsStatus = gpsChipText(now);
+    $("gpsChip").textContent = gpsStatus[0];
+    $("gpsChip").className = "chip " + gpsStatus[1];
+    $("recChip").style.display = (!stale && now - log.lastRow < 3000) ? "" : "none";
+    if (log.err) {
+      $("logInfo").textContent = "log error";
+      $("logInfo").style.color = "var(--al)";
+    }
+    else if (now > infoUntil) $("logInfo").textContent = "";
+
+    if (sessionOpen) {
+      const idleMs = Math.max(5, SET.autoEndSec) * 1000;
+      const dataGap = now - lastRx;
+      const clockGap = isFinite(clockSec) ? now - lastClockMove : 0;
+      if (dataGap > idleMs) {
+        finishSession("no data");
+      } else if (clockGap > idleMs) {
+        waitClock = true;
+        clockAtEnd = clockSec;
+        finishSession("timer stopped");
+      }
+    }
+
     if ($("panel").classList.contains("open")) renderDebug();
   }, 1000);
-  setInterval(() => { const now = Date.now(); if (sessionOpen && now - lastRx <= 3000) log.add(makeRow(now)); }, 1000);   // one row per second while data is fresh
+  setInterval(() => {
+    const now = Date.now();
+    if (sessionOpen && now - lastRx <= 3000) log.add(makeRow(now));
+  }, 1000); // one row per second while data is fresh
   setInterval(() => log.flush(), 5000);
 
   // keep screen on (needs a user tap, and a secure context)
-  const wake = async () => { try { await navigator.wakeLock.request("screen"); } catch (e) {} };
+  const wake = async () => {
+    try {
+      await navigator.wakeLock.request("screen");
+    } catch (error) {}
+  };
   document.addEventListener("click", wake, { once: true });
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") log.flush(); else wake(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") log.flush();
+    else wake();
+  });
   window.addEventListener("pagehide", () => log.flush());
 
   // Logs that never got saved (app closed, phone off or crashed mid-trip) are saved a few seconds after start-up.
