@@ -440,17 +440,7 @@
       markSaved: (sid, name) => run(["sessions"], "readwrite", t => { const ss = t.objectStore("sessions"), g = ss.get(sid); g.onsuccess = () => { const x = g.result; if (x) { x.saved = name; ss.put(x); } }; }),
       listSessions: () => run(["sessions"], "readonly", t => t.objectStore("sessions").getAll()).then(rq => rq.result.sort((a, b) => b.id - a.id)),
       getRows: sid => run(["rows"], "readonly", t => t.objectStore("rows").index("sid").getAll(sid)).then(rq => rq.result),
-      prune: keep => run(["sessions", "rows"], "readwrite", t => {
-        const ss = t.objectStore("sessions"), kq = ss.getAllKeys();
-        kq.onsuccess = () => {
-          const keys = kq.result.sort((a, b) => a - b);
-          keys.slice(0, Math.max(0, keys.length - keep)).forEach(id => {
-            ss.delete(id);
-            const cr = t.objectStore("rows").index("sid").openCursor(IDBKeyRange.only(id));
-            cr.onsuccess = () => { const c = cr.result; if (c) { c.delete(); c.continue(); } };
-          });
-        };
-      }),
+      prune: () => Promise.resolve(),
       clear: () => run(["sessions", "rows"], "readwrite", t => { t.objectStore("sessions").clear(); t.objectStore("rows").clear(); }),
     };
   }
@@ -463,7 +453,7 @@
       markSaved: (sid, name) => { const x = sessions.find(v => v.id === sid); if (x) x.saved = name; return P(); },
       listSessions: () => P(sessions.slice().sort((a, b) => b.id - a.id)),
       getRows: sid => P(rows[sid] || []),
-      prune: keep => { while (sessions.length > keep) { const s = sessions.shift(); delete rows[s.id]; } return P(); },
+      prune: () => P(),
       clear: () => { sessions = []; rows = {}; return P(); },
     };
   }
@@ -486,7 +476,6 @@
           log.tripId = L.createTripId();
           log.sid = await logStore.newSession(rows[0].t, log.tripId);
           log.needNew = false;
-          await logStore.prune(20);
         }
         rows.forEach(row => { row.tripId = log.tripId; });
         await logStore.appendRows(log.sid, rows);
