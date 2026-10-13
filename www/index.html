@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>Pocco Display</title>
+<style>
+:root{--bg:#0b0d10;--card:#151a20;--fg:#e8edf2;--mut:#7d8895;--ok:#4cc38a;--ca:#f2b705;--al:#ff4d4d;--trk:#2a323b;--cy:#5ec8ff;--lilac:#b79cff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100%}
+body.night #app{filter:brightness(.5) saturate(.85)}
+#bar{display:flex;gap:8px;align-items:center;padding:4px 10px;font-size:13px;background:#10151a;color:var(--mut);white-space:nowrap;overflow:hidden}
+#bar .dot{width:9px;height:9px;border-radius:50%;background:var(--al);flex:none}
+#bar.ok .dot{background:var(--ok)}
+#bar .sp{flex:1}
+.chip{padding:2px 8px;border-radius:999px;background:#1a1f25;font-size:11px}
+.chip.good{color:var(--ok)}.chip.warn{color:var(--ca)}.chip.rec{color:var(--al)}
+button{background:#1d242c;color:var(--fg);border:0;border-radius:6px;padding:5px 12px;font-size:13px}
+#grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr;grid-template-rows:repeat(2,1fr);gap:8px;padding:8px}
+@media (min-aspect-ratio:3/2){#grid{grid-template-columns:repeat(2,1fr);grid-template-rows:1fr}}
+.tile{align-self:center;background:var(--card);border-radius:12px;border:3px solid transparent;display:flex;height:min(100%,calc(100vw - 16px),calc((100vh - 80px)/2));justify-self:center;min-height:0;min-width:0;width:min(100%,calc(100vw - 16px),calc((100vh - 80px)/2))}
+.tile.egt{height:calc(min(100%,calc(100vw - 16px),calc((100vh - 80px)/2)) - 10px)}
+@media (min-aspect-ratio:3/2){.tile{height:min(100%,calc((100vw - 24px)/2),calc(100vh - 80px));width:min(100%,calc((100vw - 24px)/2),calc(100vh - 80px))}}
+@media (min-aspect-ratio:3/2){.tile.egt{height:calc(min(100%,calc((100vw - 24px)/2),calc(100vh - 80px)) - 10px)}}
+.tile>svg{flex:1;min-height:0;width:100%}
+.tile.combo>svg{flex:0 1 auto;align-self:center;aspect-ratio:1;height:auto;min-width:0;width:100%}
+.combo-gauge.ca .val{fill:var(--ca)}
+.combo-gauge.al .val{fill:var(--al)}
+.combo-gauge.na .val{fill:var(--mut)}
+.combo-gauge .nm{font-size:11px}
+.combo-gauge .val{font-size:17px}
+.combo-gauge .unit{font-size:8px}
+.tile.egt .val{font-size:17px}
+.tile.egt .unit{font-size:8px}
+.combo-divider{stroke:var(--mut);stroke-width:1;opacity:.28}
+.coolant-symbol{fill:var(--trk)}
+.coolant-thermometer,.coolant-bulb{fill:var(--trk)}
+.coolant-ticks,.coolant-waves{fill:none;stroke:var(--trk);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.dial-coolant-icon{opacity:.28}
+.dial-coolant-icon .coolant-thermometer,.dial-coolant-icon .coolant-bulb{fill:var(--mut)}
+.dial-coolant-icon .coolant-ticks,.dial-coolant-icon .coolant-waves{stroke:var(--mut)}
+.dial-oil-icon{overflow:visible;color:var(--mut);opacity:.28}
+.indicator.ok .coolant-thermometer,.indicator.ok .coolant-bulb{fill:var(--ok)}
+.indicator.ok .coolant-ticks,.indicator.ok .coolant-waves{stroke:var(--ok)}
+.indicator.ca .coolant-thermometer,.indicator.ca .coolant-bulb{fill:var(--ca)}
+.indicator.ca .coolant-ticks,.indicator.ca .coolant-waves{stroke:var(--ca)}
+.indicator.al .coolant-thermometer,.indicator.al .coolant-bulb{fill:var(--al)}
+.indicator.al .coolant-ticks,.indicator.al .coolant-waves{stroke:var(--al)}
+.indicator.ok .coolant-symbol{fill:var(--ok)}
+.indicator.ca .coolant-symbol{fill:var(--ca)}
+.indicator.al .coolant-symbol{fill:var(--al)}
+.battery-outline,.battery-mark{fill:none;stroke:var(--trk);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.battery-terminal{fill:var(--trk)}
+.indicator.ok .battery-outline,.indicator.ok .battery-mark{stroke:var(--ok)}
+.indicator.ok .battery-terminal{fill:var(--ok)}
+.indicator.ca .battery-outline,.indicator.ca .battery-mark{stroke:var(--ca)}
+.indicator.ca .battery-terminal{fill:var(--ca)}
+.indicator.al .battery-outline,.indicator.al .battery-mark{stroke:var(--al)}
+.indicator.al .battery-terminal{fill:var(--al)}
+.indicator.flash{animation:ifl .6s steps(2) infinite}
+@keyframes ifl{50%{opacity:.25}}
+.battery-voltage{fill:var(--mut);font-size:7px;font-variant-numeric:tabular-nums;text-anchor:middle}
+.tile.combo.alert-ca{border-color:var(--ca)}
+.tile.combo.alert-al{border-color:var(--al);animation:fl .6s steps(2) infinite}
+.tile.ca{border-color:var(--ca)}
+.tile.al{border-color:var(--al);animation:fl .6s steps(2) infinite}
+@keyframes fl{50%{background:#3a1515}}
+.trk{fill:none;stroke:var(--ok);stroke-width:10}
+.z{fill:none;stroke-width:10}
+.z.ca{stroke:var(--ca)}.z.al{stroke:var(--al)}
+.nd{stroke:#fff;stroke-width:3;stroke-linecap:round}
+.val{font-size:30px;font-weight:700;fill:var(--fg);text-anchor:middle;font-variant-numeric:tabular-nums}
+.tile.ca .val{fill:var(--ca)}.tile.al .val{fill:var(--al)}
+.unit,.nm,.lim{fill:var(--mut);text-anchor:middle}
+.unit{font-size:11px}.nm{font-size:11px}.lim{font-size:9px}
+/* peak / low markers and trend arrows */
+.pk path{fill:#fff;stroke:#0b0d10;stroke-width:.6}
+.mn path{fill:var(--cy);stroke:#0b0d10;stroke-width:.6}
+.cooltick{stroke:var(--lilac);stroke-width:2.2}
+.trend polygon{fill:var(--fg)}
+/* shut-down strip inside the EGT tile */
+.cool-bg{fill:#1a1f25}
+.cool-main{fill:var(--mut);font-size:11px;font-weight:700;letter-spacing:.04em;text-anchor:middle}
+.cool-sub{fill:var(--mut);font-size:7px;text-anchor:middle;opacity:.85}
+#cool.hot .cool-bg{fill:#3a2b05;animation:pulse 1.6s ease-in-out infinite}
+#cool.hot .cool-main{fill:var(--ca)}
+#cool.safe .cool-bg{fill:#0f2e1e}
+#cool.safe .cool-main{fill:var(--ok)}
+@keyframes pulse{50%{fill:#4d3a07}}
+#strip{display:flex;align-items:center;gap:10px;padding:6px 10px 10px}
+#clock{font-size:20px;font-variant-numeric:tabular-nums;color:var(--mut)}
+#strip .sp{flex:1}
+#logInfo{font-size:12px;color:var(--al)}
+body.stale .tile{opacity:.3}
+#panel{position:fixed;inset:0;background:#0b0d10;overflow:auto;padding:14px;display:none;z-index:5}
+#panel.open{display:block}
+#panel h3{margin:18px 0 6px;font-size:14px;color:var(--mut);font-weight:600}
+#panel p{margin:4px 0;font-size:12px;color:var(--mut);line-height:1.4}
+#panel input[type=text]{width:100%;padding:8px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
+#panel textarea,#panel pre{width:100%;height:160px;background:#10151a;color:#9fb0c0;border:1px solid #2a323b;border-radius:6px;font:11px/1.4 ui-monospace,monospace;padding:8px;white-space:pre-wrap;margin:0;overflow:auto}
+#panel .row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+#panel .credit{margin:14px 0 0;color:var(--mut);font-size:11px}
+.lrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:10px 0;padding:8px;background:#10151a;border-radius:8px}
+.lrow b{flex:1 0 100%;font-size:14px}
+.lrow label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);flex:1 0 90px}
+.lrow input{width:100%;padding:6px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;margin:6px 0;background:#10151a;border-radius:8px;font-size:12px}
+.srow .btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <span class="dot"></span><span id="status">connecting…</span><span class="sp"></span>
+    <span class="chip rec" id="recChip" style="display:none">REC</span>
+    <span class="chip" id="gpsChip">GPS …</span>
+    <button id="themeBtn">Auto</button>
+    <button id="menuBtn">Menu</button>
+  </div>
+  <div id="grid"></div>
+  <div id="strip"><div id="clock">--:--</div><span class="sp"></span><span id="logInfo"></span></div>
+</div>
+
+<div id="panel">
+  <div class="row"><button id="closeBtn">Close</button></div>
+
+  <h3>Connection</h3>
+  <input type="text" id="urlIn" spellcheck="false" autocapitalize="off">
+  <div class="row">
+    <label><input type="checkbox" id="demoIn"> Demo mode</label>
+  </div>
+
+  <h3>Dial limits (changes preview on the gauges; Save &amp; reload keeps them). Colour zones are for this page only; the POCCO+ alarms are set on the device. Leave a limit blank to skip it.</h3>
+  <div id="limits"></div>
+
+  <h3>Other settings</h3>
+  <div id="others"></div>
+  <div class="row"><label><input type="checkbox" id="autoSaveIn"> Auto-save a CSV to the selected output folder when a log ends (Android app only)</label></div>
+  <div class="row" id="outputFolderRow" style="display:none">
+    <button id="chooseFolderBtn">Choose output folder</button>
+    <button id="documentsFolderBtn">Use Documents</button>
+    <span id="outputFolderInfo" style="font-size:12px;color:var(--mut)"></span>
+  </div>
+
+  <div class="row">
+    <button id="saveBtn">Save &amp; reload</button>
+    <button id="resetBtn">Reset URL</button>
+    <button id="resetLimBtn">Reset limits &amp; settings</button>
+    <span id="limErr" style="color:var(--al);font-size:12px"></span>
+  </div>
+
+  <h3>Display</h3>
+  <p id="lightInfo"></p>
+
+  <h3>GPS</h3>
+  <p id="gpsInfo"></p>
+  <div class="row"><button id="gpsBtn">(Re)start GPS</button></div>
+
+  <h3>Logs (one CSV per session, newest first, last 20 kept)</h3>
+  <p id="logBackend"></p>
+  <p id="exportMsg" style="color:var(--ok)"></p>
+  <div id="sessions"></div>
+  <div class="row"><button id="delLogsBtn">Delete all logs</button></div>
+
+  <h3>Widgets seen that are not on the dashboard (id: last value)</h3>
+  <pre id="unk">none yet</pre>
+
+  <h3>Other commands seen (first frame of each)</h3>
+  <pre id="cmds">none yet</pre>
+
+  <h3>Raw frame log (decoded, newest last)</h3>
+  <div class="row"><button id="pauseBtn">Pause log</button><button id="copyBtn">Copy log</button><span id="decErr" style="color:var(--al);font-size:12px"></span></div>
+  <textarea id="raw" readonly></textarea>
+  <p class="credit">Coolant icon by Magnific via <a href="https://www.flaticon.com/free-icon/engine-coolant_95134" target="_blank" rel="noreferrer">Flaticon</a>.</p>
+</div>
+
+<script src="msgpack.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
