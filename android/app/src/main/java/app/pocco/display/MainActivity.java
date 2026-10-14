@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(OutputFolderPlugin.class);
+        registerPlugin(WifiConnectPlugin.class);
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();

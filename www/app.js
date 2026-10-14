@@ -14,6 +14,10 @@
   const demo = params.get("demo") === "1" || store.get("demo", "0") === "1";
   const DEFAULT_URL = "ws://192.168.4.1/dashws";
   const url = store.get("url", DEFAULT_URL);
+  const DEFAULT_SSID = "Madman POCCO+";
+  const wifiSsid = store.get("wifiSsid", DEFAULT_SSID);
+  const wifiPass = store.get("wifiPass", "");
+  const wifiAuto = store.get("wifiAuto", "1") === "1";
 
   // ================================================================ config
   // Widget ids come from your DevTools capture of ws://192.168.4.1/dashws.
@@ -327,7 +331,11 @@
   }
 
   function onFrame(frame) {
-    const now = Date.now(); lastRx = now;
+    const now = Date.now();
+    lastRx = now;
+    connected = true;
+    setStatus(demo ? "DEMO" : "connected", true);
+    document.body.classList.remove("stale");
     if (!paused) {
       rawLog.push(new Date().toISOString().slice(11, 23) + "  " + JSON.stringify(frame));
       if (rawLog.length > 40) rawLog.shift();
@@ -552,6 +560,46 @@
       $("outputFolderInfo").style.color = "var(--al)";
     }
   }
+
+  async function applyWifiConnect() {
+    if (!native) {
+      if ($("wifiStatusInfo")) $("wifiStatusInfo").textContent = "Wi-Fi auto-connect is available in the Android app.";
+      return;
+    }
+    const ssid = ($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID;
+    const password = $("wifiPassIn") ? $("wifiPassIn").value : wifiPass;
+    const auto = $("wifiAutoIn") ? $("wifiAutoIn").checked : wifiAuto;
+
+    if (auto && ssid) {
+      try {
+        await callNative("WifiConnect", "suggestNetwork", { ssid, password });
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Waiting for AP…";
+          $("wifiStatusInfo").style.color = "var(--ok)";
+        }
+        await checkWifiAndConnect();
+      } catch (e) {
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Wi-Fi auto-connect error: " + ((e && e.message) || e);
+          $("wifiStatusInfo").style.color = "var(--al)";
+        }
+      }
+    } else {
+      try {
+        if (ssid) await callNative("WifiConnect", "removeSuggestion", { ssid });
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Auto-connect disabled.";
+          $("wifiStatusInfo").style.color = "var(--mut)";
+        }
+      } catch (e) {
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Could not disable Wi-Fi auto-connect: " + ((e && e.message) || e);
+          $("wifiStatusInfo").style.color = "var(--al)";
+        }
+      }
+      await checkWifiAndConnect();
+    }
+  }
   // ---- auto-save when a session ends (Android app only: a browser cannot save files silently)
   let infoUntil = 0;
   function info(t, bad) { $("logInfo").textContent = t; $("logInfo").style.color = bad ? "var(--al)" : "var(--ok)"; infoUntil = Date.now() + 60000; }
@@ -612,27 +660,47 @@
     $("bar").className = connectedOk ? "ok" : "";
   }
 
+  let activeSocket = null, activePingTimer = null, connectTimer = null;
+
   function connect() {
+    if (activeSocket && (activeSocket.readyState === WebSocket.CONNECTING || activeSocket.readyState === WebSocket.OPEN)) return;
+    if (connectTimer) {
+      clearTimeout(connectTimer);
+      connectTimer = null;
+    }
+    if (activeSocket) {
+      try {
+        activeSocket.onclose = null;
+        activeSocket.onerror = null;
+        activeSocket.close();
+      } catch (e) {}
+      activeSocket = null;
+    }
+
     setStatus("connecting…", false);
-    let socket, pingTimer;
+    let socket;
     try {
       socket = new WebSocket(url);
+      activeSocket = socket;
     } catch (error) {
       setStatus("bad URL", false);
+      connectTimer = setTimeout(() => wifiAuto && native ? checkWifiAndConnect() : connect(), 3000);
       return;
     }
 
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
+      if (socket !== activeSocket) return;
       connected = true;
       setStatus("connected", true);
-      pingTimer = setInterval(() => {
+      activePingTimer = setInterval(() => {
         try {
           socket.send(PING);
         } catch (error) {}
       }, 5000);
     };
     socket.onmessage = event => {
+      if (socket !== activeSocket) return;
       try {
         onFrame(typeof event.data === "string" ? JSON.parse(event.data) : unpack(event.data));
         $("decErr").textContent = "";
@@ -641,16 +709,108 @@
       }
     };
     socket.onclose = () => {
-      connected = false;
-      clearInterval(pingTimer);
-      setStatus("disconnected, retrying…", false);
-      setTimeout(connect, 2000);
+      if (socket === activeSocket) {
+        connected = false;
+        activeSocket = null;
+        if (activePingTimer) clearInterval(activePingTimer);
+        activePingTimer = null;
+        const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
+        const auto = store.get("wifiAuto", "1") === "1";
+        if (auto && native) {
+          setStatus("Waiting for AP…", false);
+          connectTimer = setTimeout(checkWifiAndConnect, 3000);
+        } else {
+          setStatus("disconnected, retrying…", false);
+          connectTimer = setTimeout(connect, 3000);
+        }
+      } else {
+        if (activePingTimer) clearInterval(activePingTimer);
+        activePingTimer = null;
+      }
     };
     socket.onerror = () => {
       try {
         socket.close();
       } catch (error) {}
     };
+  }
+
+  function stopSocket() {
+    if (connectTimer) {
+      clearTimeout(connectTimer);
+      connectTimer = null;
+    }
+    if (activePingTimer) {
+      clearInterval(activePingTimer);
+      activePingTimer = null;
+    }
+    if (activeSocket) {
+      const socket = activeSocket;
+      activeSocket = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      try {
+        socket.close();
+      } catch (e) {}
+    }
+    connected = false;
+  }
+
+  let wifiCheckInProgress = false, wifiCheckAgain = false;
+  async function checkWifiAndConnect() {
+    if (demo) return;
+    const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
+    const auto = store.get("wifiAuto", "1") === "1";
+
+    if (!auto || !native) {
+      connect();
+      return;
+    }
+
+    if (wifiCheckInProgress) {
+      wifiCheckAgain = true;
+      return;
+    }
+    wifiCheckInProgress = true;
+    try {
+      const info = await callNative("WifiConnect", "getCurrentSsid", {});
+      const currentSsid = (info.ssid || "").trim();
+      if (info.isWifi && currentSsid.toLowerCase() === targetSsid.toLowerCase()) {
+        connect();
+      } else {
+        stopSocket();
+        setStatus("Waiting for AP…", false);
+      }
+    } catch (e) {
+      stopSocket();
+      setStatus("Waiting for AP…", false);
+      if ($("wifiStatusInfo")) {
+        $("wifiStatusInfo").textContent = "Could not check Wi-Fi status: " + ((e && e.message) || e);
+        $("wifiStatusInfo").style.color = "var(--al)";
+      }
+    } finally {
+      wifiCheckInProgress = false;
+      if (wifiCheckAgain) {
+        wifiCheckAgain = false;
+        checkWifiAndConnect();
+      }
+    }
+  }
+
+  const addPluginListener = (plug, eventName, callback) => {
+    if (Cap.Plugins && Cap.Plugins[plug] && Cap.Plugins[plug].addListener) {
+      return Cap.Plugins[plug].addListener(eventName, callback);
+    }
+    if (typeof Cap.registerPlugin === "function") {
+      const p = Cap.registerPlugin(plug);
+      if (p && p.addListener) return p.addListener(eventName, callback);
+    }
+  };
+
+  if (native) {
+    try {
+      addPluginListener("WifiConnect", "wifiNetworkChanged", () => checkWifiAndConnect());
+    } catch (e) {}
   }
 
   function startDemo() {
@@ -777,6 +937,15 @@
   }
   buildEditors();
   $("urlIn").value = url; $("demoIn").checked = demo; $("autoSaveIn").checked = !!SET.autoSave;
+  if ($("wifiSsidIn")) $("wifiSsidIn").value = wifiSsid;
+  if ($("wifiPassIn")) $("wifiPassIn").value = wifiPass;
+  if ($("wifiAutoIn")) $("wifiAutoIn").checked = wifiAuto;
+  if ($("wifiAutoIn")) $("wifiAutoIn").onchange = () => {
+    store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
+    store.set("wifiPass", $("wifiPassIn").value);
+    store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
+    applyWifiConnect();
+  };
   $("demoIn").onchange = () => {
     store.set("demo", $("demoIn").checked ? "1" : "0");
     location.reload();
@@ -795,6 +964,17 @@
     if (!result.err) {
       store.set("limits", JSON.stringify(result.lim));
       store.set("settings", JSON.stringify(result.st));
+    }
+    if ($("wifiSsidIn")) {
+      const ssid = $("wifiSsidIn").value.trim() || DEFAULT_SSID;
+      const password = $("wifiPassIn").value;
+      const auto = $("wifiAutoIn").checked ? "1" : "0";
+      const changed = ssid !== store.get("wifiSsid", DEFAULT_SSID) ||
+        password !== store.get("wifiPass", "") || auto !== store.get("wifiAuto", "1");
+      store.set("wifiSsid", ssid);
+      store.set("wifiPass", password);
+      store.set("wifiAuto", auto);
+      if (changed) applyWifiConnect();
     }
     $("panel").classList.remove("open");
   };
@@ -829,6 +1009,11 @@
     store.set("settings", JSON.stringify(result.st));
     store.set("url", $("urlIn").value.trim() || DEFAULT_URL);
     store.set("demo", $("demoIn").checked ? "1" : "0");
+    if ($("wifiSsidIn")) {
+      store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
+      store.set("wifiPass", $("wifiPassIn").value);
+      store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
+    }
     location.reload();
   };
   $("resetBtn").onclick = () => {
@@ -973,5 +1158,13 @@
   recoverUnsaved();
 
   startGps();
-  if (demo) startDemo(); else connect();
+  if (demo) {
+    startDemo();
+  } else if (native && wifiAuto) {
+    const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
+    setStatus("Waiting for AP…", false);
+    applyWifiConnect();
+  } else {
+    checkWifiAndConnect();
+  }
 })();

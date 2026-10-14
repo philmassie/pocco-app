@@ -140,6 +140,22 @@ body.stale .tile{opacity:.3}
     <label><input type="checkbox" id="demoIn"> Demo mode</label>
   </div>
 
+  <div id="wifiSection" style="margin-top:10px;padding:8px;background:#10151a;border-radius:8px">
+    <div style="font-size:12px;font-weight:600;color:var(--mut);margin-bottom:6px">Device Wi-Fi Auto-Connect (Android App)</div>
+    <div class="row" style="margin-top:4px">
+      <label style="flex:1"><span style="font-size:11px;color:var(--mut)">Wi-Fi SSID:</span>
+        <input type="text" id="wifiSsidIn" placeholder="e.g. POCCO-AP" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
+      </label>
+      <label style="flex:1"><span style="font-size:11px;color:var(--mut)">Password (optional):</span>
+        <input type="password" id="wifiPassIn" placeholder="Password" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
+      </label>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label><input type="checkbox" id="wifiAutoIn"> Automatically connect to this Wi-Fi AP when in range (enabled by default)</label>
+    </div>
+    <p id="wifiStatusInfo" style="font-size:11px;color:var(--mut);margin:4px 0 0"></p>
+  </div>
+
   <h3>Dial limits (changes preview on the gauges; Save &amp; reload keeps them). Colour zones are for this page only; the POCCO+ alarms are set on the device. Leave a limit blank to skip it.</h3>
   <div id="limits"></div>
 
