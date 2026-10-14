@@ -168,7 +168,7 @@
       : markup;
     // --- added: "safe to shut down" strip in the free space below the EGT dial
     const coolStrip = g.key === "egt"
-      ? `<g id="cool"><rect class="cool-bg" x="22" y="95" width="156" height="36" rx="9"/><text class="cool-main" id="coolMain" x="100" y="110.5">EGT: waiting</text><text class="cool-sub" id="coolSub" x="100" y="123"></text></g>` : "";
+      ? `<g id="cool"><rect class="cool-bg" x="22" y="100" width="156" height="36" rx="9"/><text class="cool-main" id="coolMain" x="100" y="115.5">EGT: waiting</text><text class="cool-sub" id="coolSub" x="100" y="128"></text></g>` : "";
     el.innerHTML = combined ? markup : `<svg viewBox="0 0 200 170" preserveAspectRatio="xMidYMid meet">${singleGaugeMarkup}${coolStrip}</svg>`;
     (combined ? comboSvg : grid).appendChild(el);
     g.el = el; g.needle = el.querySelector(".needle"); g.valEl = el.querySelector(".val");
@@ -790,7 +790,14 @@
     refreshOutputFolder();
   };
   $("limits").addEventListener("input", previewThresholds);
-  $("closeBtn").onclick = () => $("panel").classList.remove("open");
+  $("closeBtn").onclick = () => {
+    const result = readEditors();
+    if (!result.err) {
+      store.set("limits", JSON.stringify(result.lim));
+      store.set("settings", JSON.stringify(result.st));
+    }
+    $("panel").classList.remove("open");
+  };
   $("chooseFolderBtn").onclick = async () => {
     try {
       const result = await callNative("OutputFolder", "chooseFolder", {});
@@ -910,6 +917,8 @@
       }
     }
 
+    setWakeLock(demo || sessionOpen);
+
     if ($("panel").classList.contains("open")) renderDebug();
   }, 1000);
   setInterval(() => {
@@ -918,18 +927,39 @@
   }, 1000); // one row per second while data is fresh
   setInterval(() => log.flush(), 5000);
 
-  // keep screen on (needs a user tap, and a secure context)
-  const wake = async () => {
-    try {
-      await navigator.wakeLock.request("screen");
-    } catch (error) {}
-  };
-  document.addEventListener("click", wake, { once: true });
+  // Dynamic screen wake lock management
+  let wakeLockSentinel = null;
+  async function setWakeLock(active) {
+    if (active) {
+      if (!wakeLockSentinel && "wakeLock" in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request("screen");
+          wakeLockSentinel.addEventListener("release", () => { wakeLockSentinel = null; });
+        } catch (error) {}
+      }
+    } else {
+      if (wakeLockSentinel) {
+        try {
+          await wakeLockSentinel.release();
+        } catch (error) {}
+        wakeLockSentinel = null;
+      }
+    }
+  }
+
+  document.addEventListener("click", () => setWakeLock(demo || sessionOpen), { once: true });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") log.flush();
-    else wake();
+    if (document.visibilityState === "hidden") {
+      log.flush();
+      setWakeLock(false);
+    } else {
+      setWakeLock(demo || sessionOpen);
+    }
   });
-  window.addEventListener("pagehide", () => log.flush());
+  window.addEventListener("pagehide", () => {
+    log.flush();
+    setWakeLock(false);
+  });
 
   // Logs that never got saved (app closed, phone off or crashed mid-trip) are saved a few seconds after start-up.
   async function recoverUnsaved() {
