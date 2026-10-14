@@ -14,6 +14,10 @@
   const demo = params.get("demo") === "1" || store.get("demo", "0") === "1";
   const DEFAULT_URL = "ws://192.168.4.1/dashws";
   const url = store.get("url", DEFAULT_URL);
+  const DEFAULT_SSID = "Madman POCCO+";
+  const wifiSsid = store.get("wifiSsid", DEFAULT_SSID);
+  const wifiPass = store.get("wifiPass", "");
+  const wifiAuto = store.get("wifiAuto", "0") === "1";
 
   // ================================================================ config
   // Widget ids come from your DevTools capture of ws://192.168.4.1/dashws.
@@ -552,6 +556,41 @@
       $("outputFolderInfo").style.color = "var(--al)";
     }
   }
+
+  async function applyWifiConnect() {
+    if (!native) {
+      if ($("wifiStatusInfo")) $("wifiStatusInfo").textContent = "Wi-Fi auto-connect is available in the Android app.";
+      return;
+    }
+    const ssid = ($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID;
+    const password = $("wifiPassIn") ? $("wifiPassIn").value : wifiPass;
+    const auto = $("wifiAutoIn") ? $("wifiAutoIn").checked : wifiAuto;
+
+    if (auto && ssid) {
+      try {
+        await callNative("WifiConnect", "suggestNetwork", { ssid, password });
+        await callNative("WifiConnect", "requestNetwork", { ssid, password });
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Auto-connecting to " + ssid + " when in range…";
+          $("wifiStatusInfo").style.color = "var(--ok)";
+        }
+      } catch (e) {
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Wi-Fi auto-connect error: " + ((e && e.message) || e);
+          $("wifiStatusInfo").style.color = "var(--al)";
+        }
+      }
+    } else {
+      try {
+        if (ssid) await callNative("WifiConnect", "removeSuggestion", { ssid });
+        await callNative("WifiConnect", "releaseNetwork", {});
+        if ($("wifiStatusInfo")) {
+          $("wifiStatusInfo").textContent = "Auto-connect disabled.";
+          $("wifiStatusInfo").style.color = "var(--mut)";
+        }
+      } catch (e) {}
+    }
+  }
   // ---- auto-save when a session ends (Android app only: a browser cannot save files silently)
   let infoUntil = 0;
   function info(t, bad) { $("logInfo").textContent = t; $("logInfo").style.color = bad ? "var(--al)" : "var(--ok)"; infoUntil = Date.now() + 60000; }
@@ -777,6 +816,15 @@
   }
   buildEditors();
   $("urlIn").value = url; $("demoIn").checked = demo; $("autoSaveIn").checked = !!SET.autoSave;
+  if ($("wifiSsidIn")) $("wifiSsidIn").value = wifiSsid;
+  if ($("wifiPassIn")) $("wifiPassIn").value = wifiPass;
+  if ($("wifiAutoIn")) $("wifiAutoIn").checked = wifiAuto;
+  if ($("wifiAutoIn")) $("wifiAutoIn").onchange = () => {
+    store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
+    store.set("wifiPass", $("wifiPassIn").value);
+    store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
+    applyWifiConnect();
+  };
   $("demoIn").onchange = () => {
     store.set("demo", $("demoIn").checked ? "1" : "0");
     location.reload();
@@ -788,6 +836,7 @@
     renderSessions();
     $("panel").classList.add("open");
     refreshOutputFolder();
+    applyWifiConnect();
   };
   $("limits").addEventListener("input", previewThresholds);
   $("closeBtn").onclick = () => {
@@ -795,6 +844,12 @@
     if (!result.err) {
       store.set("limits", JSON.stringify(result.lim));
       store.set("settings", JSON.stringify(result.st));
+    }
+    if ($("wifiSsidIn")) {
+      store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
+      store.set("wifiPass", $("wifiPassIn").value);
+      store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
+      applyWifiConnect();
     }
     $("panel").classList.remove("open");
   };
@@ -829,6 +884,11 @@
     store.set("settings", JSON.stringify(result.st));
     store.set("url", $("urlIn").value.trim() || DEFAULT_URL);
     store.set("demo", $("demoIn").checked ? "1" : "0");
+    if ($("wifiSsidIn")) {
+      store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
+      store.set("wifiPass", $("wifiPassIn").value);
+      store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
+    }
     location.reload();
   };
   $("resetBtn").onclick = () => {
@@ -973,5 +1033,6 @@
   recoverUnsaved();
 
   startGps();
+  if (wifiAuto) applyWifiConnect();
   if (demo) startDemo(); else connect();
 })();
