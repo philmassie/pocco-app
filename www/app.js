@@ -2,6 +2,7 @@ import { createAppConfig } from "./modules/config.mjs";
 import { makeIdbStore, makeMemStore } from "./modules/log-storage.mjs";
 import { createMenu } from "./modules/menu.mjs";
 import { applySeverity } from "./modules/severity.mjs";
+import { createWifiController } from "./modules/wifi.mjs";
 
 (function () {
   "use strict";
@@ -512,45 +513,6 @@ import { applySeverity } from "./modules/severity.mjs";
     }
   }
 
-  async function applyWifiConnect() {
-    if (!native) {
-      if ($("wifiStatusInfo")) $("wifiStatusInfo").textContent = "Wi-Fi auto-connect is available in the Android app.";
-      return;
-    }
-    const ssid = ($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID;
-    const password = $("wifiPassIn") ? $("wifiPassIn").value : wifiPass;
-    const auto = $("wifiAutoIn") ? $("wifiAutoIn").checked : wifiAuto;
-
-    if (auto && ssid) {
-      try {
-        await callNative("WifiConnect", "suggestNetwork", { ssid, password });
-        if ($("wifiStatusInfo")) {
-          $("wifiStatusInfo").textContent = "Waiting for AP…";
-          $("wifiStatusInfo").style.color = "var(--ok)";
-        }
-        await checkWifiAndConnect();
-      } catch (e) {
-        if ($("wifiStatusInfo")) {
-          $("wifiStatusInfo").textContent = "Wi-Fi auto-connect error: " + ((e && e.message) || e);
-          $("wifiStatusInfo").style.color = "var(--al)";
-        }
-      }
-    } else {
-      try {
-        if (ssid) await callNative("WifiConnect", "removeSuggestion", { ssid });
-        if ($("wifiStatusInfo")) {
-          $("wifiStatusInfo").textContent = "Auto-connect disabled.";
-          $("wifiStatusInfo").style.color = "var(--mut)";
-        }
-      } catch (e) {
-        if ($("wifiStatusInfo")) {
-          $("wifiStatusInfo").textContent = "Could not disable Wi-Fi auto-connect: " + ((e && e.message) || e);
-          $("wifiStatusInfo").style.color = "var(--al)";
-        }
-      }
-      await checkWifiAndConnect();
-    }
-  }
   // ---- auto-save when a session ends (Android app only: a browser cannot save files silently)
   let infoUntil = 0;
   function info(t, bad) { $("logInfo").textContent = t; $("logInfo").style.color = bad ? "var(--al)" : "var(--ok)"; infoUntil = Date.now() + 60000; }
@@ -612,6 +574,7 @@ import { applySeverity } from "./modules/severity.mjs";
   }
 
   let activeSocket = null, activePingTimer = null, connectTimer = null;
+  let wifiController;
 
   function connect() {
     if (activeSocket && (activeSocket.readyState === WebSocket.CONNECTING || activeSocket.readyState === WebSocket.OPEN)) return;
@@ -635,7 +598,7 @@ import { applySeverity } from "./modules/severity.mjs";
       activeSocket = socket;
     } catch (error) {
       setStatus("bad URL", false);
-      connectTimer = setTimeout(() => wifiAuto && native ? checkWifiAndConnect() : connect(), 3000);
+      connectTimer = setTimeout(() => native ? wifiController.check() : connect(), 3000);
       return;
     }
 
@@ -665,11 +628,9 @@ import { applySeverity } from "./modules/severity.mjs";
         activeSocket = null;
         if (activePingTimer) clearInterval(activePingTimer);
         activePingTimer = null;
-        const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
-        const auto = store.get("wifiAuto", "1") === "1";
-        if (auto && native) {
-          setStatus("Waiting for AP…", false);
-          connectTimer = setTimeout(checkWifiAndConnect, 3000);
+        if (native) {
+          setStatus("Checking POCCO Wi-Fi…", false);
+          connectTimer = setTimeout(() => wifiController.check(), 3000);
         } else {
           setStatus("disconnected, retrying…", false);
           connectTimer = setTimeout(connect, 3000);
@@ -707,62 +668,25 @@ import { applySeverity } from "./modules/severity.mjs";
     connected = false;
   }
 
-  let wifiCheckInProgress = false, wifiCheckAgain = false;
-  async function checkWifiAndConnect() {
-    if (demo) return;
-    const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
-    const auto = store.get("wifiAuto", "1") === "1";
-
-    if (!auto || !native) {
-      connect();
-      return;
-    }
-
-    if (wifiCheckInProgress) {
-      wifiCheckAgain = true;
-      return;
-    }
-    wifiCheckInProgress = true;
-    try {
-      const info = await callNative("WifiConnect", "getCurrentSsid", {});
-      const currentSsid = (info.ssid || "").trim();
-      if (info.isWifi && currentSsid.toLowerCase() === targetSsid.toLowerCase()) {
-        connect();
-      } else {
-        stopSocket();
-        setStatus("Waiting for AP…", false);
-      }
-    } catch (e) {
-      stopSocket();
-      setStatus("Waiting for AP…", false);
-      if ($("wifiStatusInfo")) {
-        $("wifiStatusInfo").textContent = "Could not check Wi-Fi status: " + ((e && e.message) || e);
-        $("wifiStatusInfo").style.color = "var(--al)";
-      }
-    } finally {
-      wifiCheckInProgress = false;
-      if (wifiCheckAgain) {
-        wifiCheckAgain = false;
-        checkWifiAndConnect();
-      }
-    }
-  }
-
-  const addPluginListener = (plug, eventName, callback) => {
-    if (Cap.Plugins && Cap.Plugins[plug] && Cap.Plugins[plug].addListener) {
-      return Cap.Plugins[plug].addListener(eventName, callback);
-    }
-    if (typeof Cap.registerPlugin === "function") {
-      const p = Cap.registerPlugin(plug);
-      if (p && p.addListener) return p.addListener(eventName, callback);
-    }
-  };
-
-  if (native) {
-    try {
-      addPluginListener("WifiConnect", "wifiNetworkChanged", () => checkWifiAndConnect());
-    } catch (e) {}
-  }
+  wifiController = createWifiController({
+    native,
+    demo,
+    capacitor: Cap,
+    getSettings: () => ({
+      ssid: (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim(),
+      password: $("wifiPassIn") ? $("wifiPassIn").value : wifiPass,
+      auto: store.get("wifiAuto", "1") === "1",
+    }),
+    callNative,
+    connect,
+    stopSocket,
+    setStatus,
+    setWifiInfo: (text, color) => {
+      if (!$("wifiStatusInfo")) return;
+      $("wifiStatusInfo").textContent = text;
+      if (color) $("wifiStatusInfo").style.color = color;
+    },
+  });
 
   function startDemo() {
     connected = true;
@@ -837,7 +761,7 @@ import { applySeverity } from "./modules/severity.mjs";
       setPaused: value => { paused = value; },
     },
     actions: {
-      updateGaugeLimits, renderAll, applyWifiConnect, renderSessions, refreshOutputFolder,
+      updateGaugeLimits, renderAll, applyWifiConnect: () => wifiController.apply(), renderSessions, refreshOutputFolder,
       callNative, exportMsg, startGps, exportCsv,
       clearLogs: async () => {
         await log.flush();
@@ -931,12 +855,14 @@ import { applySeverity } from "./modules/severity.mjs";
       setWakeLock(false);
     } else {
       setWakeLock(demo || sessionOpen);
+      wifiController.resume();
     }
   });
   window.addEventListener("pagehide", () => {
     log.flush();
     setWakeLock(false);
   });
+  window.addEventListener("pageshow", () => wifiController.resume());
 
   // Logs that never got saved (app closed, phone off or crashed mid-trip) are saved a few seconds after start-up.
   async function recoverUnsaved() {
@@ -950,13 +876,6 @@ import { applySeverity } from "./modules/severity.mjs";
   recoverUnsaved();
 
   startGps();
-  if (demo) {
-    startDemo();
-  } else if (native && wifiAuto) {
-    const targetSsid = (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim();
-    setStatus("Waiting for AP…", false);
-    applyWifiConnect();
-  } else {
-    checkWifiAndConnect();
-  }
+  if (demo) startDemo();
+  wifiController.start();
 })();

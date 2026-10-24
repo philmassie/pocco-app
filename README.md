@@ -18,10 +18,11 @@ Demo runs a fake 7 minute drive: warm-up, oil arming after 20 s, a short overhea
 4. Phone: Settings, About phone, tap Build number 7 times, then Developer options, switch on **USB debugging**. Plug in by USB and accept the prompt on the phone.
 5. Pick your phone in the device drop-down at the top and press the green **Run** triangle. That installs and starts the app.
    - To get a file instead: menu **Build, Build Bundle(s) / APK(s), Build APK(s)**. The file is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the phone and allow "install unknown apps" for your file manager.
+   - On Linux, you can build and install to a connected phone from the repository root with `./build-and-install-android.sh`. It checks that exactly one authorized ADB device is connected, syncs the web assets, builds the debug APK, and installs it (without launching). It needs `adb`, `npm`, and a JDK from 17 through 24; accept the USB debugging prompt on the phone first.
 6. First start: allow **Location** (for the GPS columns). Tap the screen once.
 
 ## 3. Use it in the car
-1. Open the app. Auto-connect to `Madman POCCO+` is enabled by default: the app registers a high-priority Android Wi-Fi suggestion on launch (priority and initial auto-join are available on Android 11+) and waits for Android to join it. Android may ask you to approve the suggestion; if it warns that the Wi-Fi has no internet, choose **stay connected**. You can change the SSID, password, or auto-connect setting in Menu.
+1. Open the app. The app requests the `Madman POCCO+` Wi-Fi network when it starts (enabled by default). Android may show a system prompt the first time; approve the connection. The app routes its traffic over POCCO while connected, then returns to the phone's normal network when POCCO is lost or the request is released. If POCCO is unavailable, it retries for up to five minutes and stops; waking the app starts a new attempt. With **App requests POCCO Wi-Fi** off, the app does not change Wi-Fi and only operates when the phone is already connected to the configured SSID. Change the SSID, password, or app connection setting in Menu. App-driven requests need Android 10 (API 29) or newer; on older phones, turn this option off and connect to POCCO manually.
 2. The top bar should go green ("connected"). If it says "connected, no data", open Menu and read the raw frame log. The manual (p. 5) says some phones also need mobile data off.
 3. Menu, Logs: each trip is one CSV. Every CSV row includes the same UUID in its `trip_id` column, so trips can be identified when CSVs are combined. In the app choose **Choose output folder** to select a phone folder for saved and auto-saved CSVs; the permission is remembered by Android. **Use Documents** switches back to the default. Each log row has **Save** and **Share** (Android share sheet).
 
@@ -40,7 +41,7 @@ Edit files in `www/`, then either
 - Changing `androidScheme` later changes the page's origin, so saved limits and logs in the app would not carry over.
 
 ## Not verified yet (no phone or unit was available to me)
-- The APK build itself: the project was generated and the web side tested, but I had no Android SDK here to run Gradle.
+- The APK build and new Android Wi-Fi request flow on a real phone / POCCO unit.
 - `ws://` from the app to the real unit (cleartext fix above is from a forum report plus Capacitor docs, not tested).
 - GPS inside the app, the Save (Documents folder) path on your Android version (Share is the safer one), and the Filesystem/Share calls (tested only against a stand-in for the bridge).
 - The phone's light sensor: the page tries the web `AmbientLightSensor`, which many Android WebViews do not offer. If it is missing, Auto stays on Day and you can pick Night by hand. A native sensor plugin would be the next step if you want this.

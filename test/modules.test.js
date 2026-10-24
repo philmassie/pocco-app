@@ -4,6 +4,7 @@ async function main() {
   const { createAppConfig } = await import("../www/modules/config.mjs");
   const { makeMemStore } = await import("../www/modules/log-storage.mjs");
   const { applySeverity } = await import("../www/modules/severity.mjs");
+  const { createWifiController } = await import("../www/modules/wifi.mjs");
   const values = {
     demo: "0",
     limits: JSON.stringify({ oil: { max: 8 }, coolant: { cautionHi: 92 } }),
@@ -54,6 +55,60 @@ async function main() {
   assert.deepStrictEqual(await logs.getRows(sid), [{ sid, t: 101, coolant: 88 }]);
   await logs.clear();
   assert.deepStrictEqual(await logs.listSessions(), []);
+
+  const wifiCalls = [];
+  let wifiConnected = false;
+  let connectCount = 0;
+  let stopCount = 0;
+  let wifiChanged;
+  const wifiController = createWifiController({
+    native: true,
+    demo: false,
+    capacitor: { Plugins: { WifiConnect: { addListener: (eventName, callback) => { wifiChanged = callback; } } } },
+    getSettings: () => ({ ssid: "POCCO", password: "", auto: true }),
+    callNative: async (plugin, method) => {
+      wifiCalls.push(method);
+      if (method === "requestNetwork") return { requested: true };
+      if (method === "getRequestStatus") return { requested: true, connected: wifiConnected, ssid: "POCCO" };
+      throw new Error("Unexpected native Wi-Fi method: " + method);
+    },
+    connect: () => { connectCount++; },
+    stopSocket: () => { stopCount++; },
+    setStatus: () => {},
+    setWifiInfo: () => {},
+  });
+  await wifiController.start();
+  assert.deepStrictEqual(wifiCalls, ["requestNetwork", "getRequestStatus"]);
+  assert.strictEqual(connectCount, 0);
+  wifiConnected = true;
+  await wifiChanged();
+  assert.strictEqual(connectCount, 1);
+  assert.strictEqual(stopCount, 1);
+
+  let selectedNetwork = { isWifi: true, ssid: "Home Wi-Fi" };
+  let manualConnectCount = 0;
+  let manualRequestCount = 0;
+  const manualWifiController = createWifiController({
+    native: true,
+    demo: false,
+    capacitor: { Plugins: { WifiConnect: { addListener: (eventName, callback) => { wifiChanged = callback; } } } },
+    getSettings: () => ({ ssid: "POCCO", password: "", auto: false }),
+    callNative: async (plugin, method) => {
+      if (method === "getCurrentNetwork") return selectedNetwork;
+      if (method === "requestNetwork") manualRequestCount++;
+      throw new Error("Unexpected native Wi-Fi method: " + method);
+    },
+    connect: () => { manualConnectCount++; },
+    stopSocket: () => {},
+    setStatus: () => {},
+    setWifiInfo: () => {},
+  });
+  await manualWifiController.start();
+  assert.strictEqual(manualConnectCount, 0);
+  selectedNetwork = { isWifi: true, ssid: "POCCO" };
+  await wifiChanged();
+  assert.strictEqual(manualConnectCount, 1);
+  assert.strictEqual(manualRequestCount, 0);
 }
 
 main().then(() => console.log("module tests passed")).catch(error => {

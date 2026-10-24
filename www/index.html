@@ -115,7 +115,7 @@ body.stale .tile{opacity:.3}
   </div>
 
   <div id="wifiSection" style="margin-top:10px;padding:8px;background:#10151a;border-radius:8px">
-    <div style="font-size:12px;font-weight:600;color:var(--mut);margin-bottom:6px">Device Wi-Fi Auto-Connect (Android App)</div>
+    <div style="font-size:12px;font-weight:600;color:var(--mut);margin-bottom:6px">POCCO Wi-Fi connection (Android App)</div>
     <div class="row" style="margin-top:4px">
       <label style="flex:1"><span style="font-size:11px;color:var(--mut)">Wi-Fi SSID:</span>
         <input type="text" id="wifiSsidIn" placeholder="e.g. POCCO-AP" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
@@ -125,8 +125,9 @@ body.stale .tile{opacity:.3}
       </label>
     </div>
     <div class="row" style="margin-top:6px">
-      <label><input type="checkbox" id="wifiAutoIn"> Automatically connect to this Wi-Fi AP when in range (enabled by default)</label>
+      <label><input type="checkbox" id="wifiAutoIn"> App requests POCCO Wi-Fi (enabled by default)</label>
     </div>
+    <p style="font-size:11px;color:var(--mut);margin:4px 0">On: Android may ask you to approve the first connection; the app retries for up to 5 minutes. Off: the app never switches Wi-Fi and only works while the phone is already connected to this network.</p>
     <p id="wifiStatusInfo" style="font-size:11px;color:var(--mut);margin:4px 0 0"></p>
   </div>
 
