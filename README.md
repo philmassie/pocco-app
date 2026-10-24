@@ -1,11 +1,11 @@
 # POCCO+ display, v0.1.0 (your Copilot layout + my features, packaged for Android)
 
 ## What is in this folder
-- `www/` the page: `index.html`, `app.js` (gauges, logging, menu), `logic.js` (trend, oil arming, CSV helpers), `msgpack.js` (frame decoder)
+- `www/` the page: `index.html`, `app.js` (dashboard and app lifecycle), `icons/` (reusable SVG icon assets), `modules/menu.mjs` (settings and diagnostics UI), `modules/config.mjs` (gauge defaults and saved settings), `modules/log-storage.mjs` (IndexedDB and in-memory log backends), `modules/severity.mjs` (shared severity-to-colour classes), `logic.js` (trend, oil arming, CSV helpers), `msgpack.js` (frame decoder)
 - `android/` the ready-made Android Studio project (Capacitor 8). **Open this folder in Android Studio.**
 - `node_modules/` only the three Capacitor pieces the Android build needs (`@capacitor/android`, `filesystem`, `share`). Leave it where it is.
 - `capacitor.config.json`, `package.json` Capacitor settings (see "Why these settings")
-- `test/` Node tests for the helpers: `node test/logic.test.js` and `node test/decode.test.js` (both pass)
+- `test/` Node tests for the helpers and modules; run them with `npm test`
 
 ## 1. Try the page without the car (PC)
 Open `www/index.html` in a desktop browser, then Menu, tick **Demo mode**, **Save & reload**. Or add `?demo=1` to the address.
@@ -21,8 +21,8 @@ Demo runs a fake 7 minute drive: warm-up, oil arming after 20 s, a short overhea
 6. First start: allow **Location** (for the GPS columns). Tap the screen once.
 
 ## 3. Use it in the car
-1. Join the phone to the `Madman POCCO+` WiFi. If Android says "no internet, stay connected?", choose **stay connected**. The manual (p. 5) says some phones also need mobile data off.
-2. Open the app. The top bar should go green ("connected"). If it says "connected, no data", open Menu and read the raw frame log.
+1. Open the app. Auto-connect to `Madman POCCO+` is enabled by default: the app registers a high-priority Android Wi-Fi suggestion on launch (priority and initial auto-join are available on Android 11+) and waits for Android to join it. Android may ask you to approve the suggestion; if it warns that the Wi-Fi has no internet, choose **stay connected**. You can change the SSID, password, or auto-connect setting in Menu.
+2. The top bar should go green ("connected"). If it says "connected, no data", open Menu and read the raw frame log. The manual (p. 5) says some phones also need mobile data off.
 3. Menu, Logs: each trip is one CSV. Every CSV row includes the same UUID in its `trip_id` column, so trips can be identified when CSVs are combined. In the app choose **Choose output folder** to select a phone folder for saved and auto-saved CSVs; the permission is remembered by Android. **Use Documents** switches back to the default. Each log row has **Save** and **Share** (Android share sheet).
 
 ## Changing the page later

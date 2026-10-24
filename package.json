@@ -6,7 +6,7 @@
   "scripts": {
     "sync": "npx cap sync android",
     "open": "npx cap open android",
-    "test": "node test/logic.test.js && node test/decode.test.js"
+    "test": "node test/logic.test.js && node test/decode.test.js && node test/modules.test.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

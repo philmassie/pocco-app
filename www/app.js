@@ -1,5 +1,11 @@
+import { createAppConfig } from "./modules/config.mjs";
+import { makeIdbStore, makeMemStore } from "./modules/log-storage.mjs";
+import { createMenu } from "./modules/menu.mjs";
+import { applySeverity } from "./modules/severity.mjs";
+
 (function () {
   "use strict";
+
   const L = window.POCCO_LOGIC;
   const $ = id => document.getElementById(id);
   const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -10,54 +16,10 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
     del(k) { try { localStorage.removeItem(k); } catch (e) {} },
   };
-  const params = new URLSearchParams(location.search);
-  const demo = params.get("demo") === "1" || store.get("demo", "0") === "1";
-  const DEFAULT_URL = "ws://192.168.4.1/dashws";
-  const url = store.get("url", DEFAULT_URL);
-  const DEFAULT_SSID = "Madman POCCO+";
-  const wifiSsid = store.get("wifiSsid", DEFAULT_SSID);
-  const wifiPass = store.get("wifiPass", "");
-  const wifiAuto = store.get("wifiAuto", "1") === "1";
-
-  // ================================================================ config
-  // Widget ids come from your DevTools capture of ws://192.168.4.1/dashws.
-  // Limits below are PLACEHOLDERS that only colour the dials; change them in Menu.
-  // The POCCO+ keeps its own alarm limits (and the buzzer); this page does not read them from the device.
-  //  - Battery limits follow the manual's suggested values (low alarm ~12 V, caution ~12.5 V, high caution ~14 V, high alarm ~14.5 V).
-  //  - EGT 720 C alarm is the manual's "absolute max" for mechanically injected diesels.
-  //  - Coolant, oil and the EGT caution value are guesses: edit to suit your 300Tdi.
-  // Units are assumed metric; if the unit is set to imperial, change unit/min/max/limits.
-  const IDS = { oil: 2, coolant: 3, level: 4, egt: 5, battery: 6, clock: 8 };
-  const KNOWN = new Set([2, 3, 4, 5, 6, 8]);
-  const G = {
-    oil: { id: 2, name: "Oil pressure", unit: "bar", min: 0, max: 7, dp: 1, alarmLo: 0.5, cautionLo: 0.7, cautionHi: 5, alarmHi: 6 },
-    coolant: { id: 3, name: "Coolant", unit: "°C", min: 20, max: 120, dp: 0, alarmLo: 0, cautionLo: 40, cautionHi: 95, alarmHi: 100, trendThr: 1.5 },
-    egt: { id: 5, name: "EGT", unit: "°C", min: 0, max: 800, dp: 0, cautionHi: 700, alarmHi: 720, trendThr: 30 },
-    battery: { id: 6, name: "Battery", unit: "V", min: 8, max: 16, dp: 1, alarmLo: 12, cautionLo: 12.5, cautionHi: 14, alarmHi: 14.5, noDial: true },
-  };
-  Object.keys(G).forEach(k => { G[k].key = k; });
-  const GAUGES = [G.oil, G.coolant, G.egt];          // order = drawing order
-  const FIELDS = ["min", "max", "alarmLo", "cautionLo", "cautionHi", "alarmHi"];
-  const LABELS = { min: "Dial min", max: "Dial max", alarmLo: "Alarm low", cautionLo: "Caution low", cautionHi: "Caution high", alarmHi: "Alarm high" };
-  const SET0 = { oilArmBar: 1.0, oilArmSec: 20, oilArmCoolantC: null, levelHoldSec: 2, cooldownC: 200, theme: "auto", autoSave: 1, autoEndSec: 30 };
-  const OTHER = [
-    ["oilArmBar", "Oil: engine-running level (bar)"],
-    ["oilArmSec", "Oil: hold time before armed (s)"],
-    ["oilArmCoolantC", "Oil: also need coolant above (°C), blank = off"],
-    ["levelHoldSec", "Coolant level: hold before lamp changes (s)"],
-    ["cooldownC", "EGT: safe to shut down below (°C)"],
-    ["autoEndSec", "Log ends after this many seconds with no data or a stopped timer"],
-  ];
-  // Widget 4 "low coolant" read 0.00 in your capture. ASSUMPTION: 0 = level OK, above 0 = low. Not verified on the car.
-  const levelBad = n => n > 0;
-
-  // saved overrides
-  (function () {
-    let o = {}; try { o = JSON.parse(store.get("limits", "{}")) || {}; } catch (e) {}
-    Object.keys(G).forEach(k => { const s = o[k]; if (s) FIELDS.forEach(f => { if (f in s) G[k][f] = s[f]; }); });
-  })();
-  const SET = Object.assign({}, SET0);
-  try { Object.assign(SET, JSON.parse(store.get("settings", "{}")) || {}); } catch (e) {}
+  const {
+    demo, DEFAULT_URL, url, DEFAULT_SSID, wifiSsid, wifiPass, wifiAuto,
+    IDS, KNOWN, G, GAUGES, FIELDS, LABELS, SET, OTHER, levelBad,
+  } = createAppConfig(store, location.search);
 
   // ================================================================ dials (Copilot layout, unchanged)
   const SW = 240, A0 = -120;               // 240 degree sweep, 0 deg = straight up
@@ -87,9 +49,37 @@
     const spec = comboSpecs[g.id];
     return spec ? spec.start + Math.min(1, Math.max(0, (v - g.min) / (g.max - g.min))) * spec.sweep : ang(g, v);
   };
+  function gaugeTickStep(g) {
+    const span = g.max - g.min;
+    if (!(span > 0) || !(g.tickStep > 0)) return null;
+    let factor = 1, exponent = 0, step = g.tickStep;
+    while (span / step > 8) {
+      if (factor === 1) factor = 2;
+      else if (factor === 2) factor = 5;
+      else { factor = 1; exponent++; }
+      step = g.tickStep * factor * (10 ** exponent);
+    }
+    return step;
+  }
   function updateGaugeLimits(g) {
     g.minEl.textContent = g.min;
     g.maxEl.textContent = g.max;
+    const tickStep = gaugeTickStep(g);
+    g.tickEls.replaceChildren();
+    if (tickStep) {
+      const firstTick = Math.floor(g.min / tickStep) + 1;
+      const lastTick = Math.ceil(g.max / tickStep) - 1;
+      for (let tick = firstTick; tick <= lastTick; tick++) {
+        const [x1, y1] = polar(100, g.cy, g.radius - 5, gaugeAngle(g, tick * tickStep));
+        const [x2, y2] = polar(100, g.cy, g.radius - 11, gaugeAngle(g, tick * tickStep));
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1.toFixed(2));
+        line.setAttribute("y1", y1.toFixed(2));
+        line.setAttribute("x2", x2.toFixed(2));
+        line.setAttribute("y2", y2.toFixed(2));
+        g.tickEls.appendChild(line);
+      }
+    }
     const ranges = {
       alarmLo: [g.min, g.alarmLo],
       cautionLo: [g.alarmLo == null ? g.min : g.alarmLo, g.cautionLo],
@@ -110,13 +100,10 @@
   }
   const comboTile = document.createElement("div");
   comboTile.className = "tile combo";
-  comboTile.innerHTML = '<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"><g class="indicator unknown" id="levelIndicator" transform="translate(24 98) scale(1.0)"><path class="coolant-symbol" transform="translate(-12 -12)" d="M19,7V5h2V3h-8v2h2v2H1v14h22V7H19z M21,14.417C20.71,14.129,20.517,14,20,14c-0.67,0-0.79,0.21-1.29,0.71S17.33,16,16,16s-2.21-0.79-2.71-1.29S12.67,14,12,14c-0.22,0-0.37,0.03-0.5,0.08c-0.28,0.1-0.45,0.29-0.79,0.63C10.21,15.21,9.33,16,8,16s-2.21-0.79-2.71-1.29S4.67,14,4,14c-0.517,0-0.71,0.129-1,0.417V9h18V14.417z"/></g><g class="indicator unknown" id="batteryIndicator" transform="translate(176 98)"><rect class="battery-terminal" x="-8" y="-7" width="4" height="3"/><rect class="battery-terminal" x="4" y="-7" width="4" height="3"/><rect class="battery-outline" x="-11" y="-4" width="22" height="11" rx="1"/><path class="battery-mark" d="M-5 -1v5m-2.5-2.5h5m4 0h5"/><text class="battery-voltage" id="batteryVoltage" y="16">--.- V</text></g><line class="combo-divider" x1="58" y1="100" x2="142" y2="100"/></svg>';
+  comboTile.innerHTML = '<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"><g class="indicator unknown" id="levelIndicator" transform="translate(24 98)"><svg x="-12" y="-12" width="24" height="24" viewBox="0 0 24 24"><use href="icons/coolant-level.svg#art"/></svg></g><g class="indicator unknown" id="batteryIndicator" transform="translate(176 98)"><svg x="-12" y="-8" width="24" height="16" viewBox="-12 -8 24 16"><use href="icons/battery.svg#art"/><use href="icons/battery.svg#terminals"/></svg><text class="battery-voltage" id="batteryVoltage" y="16">--.- V</text></g><line class="combo-divider" x1="58" y1="100" x2="142" y2="100"/></svg>';
   grid.appendChild(comboTile);
   const comboSvg = comboTile.querySelector("svg");
   const levelIndicator = comboSvg.querySelector("#levelIndicator");
-  const coolantIcon = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  coolantIcon.setAttribute("transform", "scale(0.8)");
-  coolantIcon.innerHTML = '<path class="coolant-thermometer" d="M-2 1V-11a2 2 0 0 1 4 0V5.5H-2Z"/><path class="coolant-ticks" d="M1 -7h6M1 -3h6M1 1h6"/><circle class="coolant-bulb" cx="0" cy="5.5" r="4"/><path class="coolant-waves" d="M-14 6C-11 6 -11 9 -8 9S-5 6 -2 6M2 6C5 6 5 9 8 9S11 6 14 6M-14 11C-10 11 -10 14 -7 14S-3 11 0 11C4 11 4 14 7 14S11 11 14 11"/>';
   const batteryIndicator = comboSvg.querySelector("#batteryIndicator");
   const batteryVoltage = comboSvg.querySelector("#batteryVoltage");
   let egtTile = null;
@@ -154,13 +141,13 @@
     const trend = g.trendThr ? `<g class="trend" visibility="hidden" transform="translate(${100 + 25} ${valueY - 6})"><polygon points="0,-4.5 4.5,3.5 -4.5,3.5"/></g>` : "";
     const dialLabelY = g.key === "coolant" ? 148 : 55;
     const dialLabelMarkup = g.key === "coolant"
-      ? `<g class="dial-coolant-icon" transform="translate(100 ${dialLabelY})">${coolantIcon.outerHTML}</g>`
+      ? `<svg class="dial-coolant-icon" x="85" y="${dialLabelY - 15}" width="30" height="30" viewBox="-15 -15 30 30"><use href="icons/coolant.svg#art"/></svg>`
       : g.key === "oil"
-        ? `<svg class="dial-oil-icon" x="81" y="46" width="44" height="20.3" viewBox="0 0 732 338" aria-hidden="true"><g fill="currentColor" fill-rule="evenodd"><path d="M42,32 L176,76 L176,105 L376,105 L406,137 L636,75 L668,108 L645,132 L627,115 L585,125 L445,285 L142,285 L142,165 L22,130 Z M65,78 L140,98 L140,126 L65,104 Z M178,138 L362,138 L396,175 L527,140 L432,250 L178,250 Z"/><path d="M230,35 H330 V70 H297 V105 H262 V70 H230 Z"/><path d="M655,187 C650,206 629,224 629,243 A26,26 0 0 0 681,243 C681,224 660,206 655,187 Z"/></g></svg>`
+        ? `<svg class="dial-oil-icon" x="81" y="46" width="44" height="20.3" viewBox="0 0 732 338" aria-hidden="true"><use href="icons/oil.svg#art"/></svg>`
         : `<text class="nm" x="100" y="${combined ? dialLabelY : 60}">${g.name}</text>`;
     const markup =
       dialLabelMarkup +
-      `<path class="trk" d="${path}"/>${zones}${marks}` +
+      `<g class="ticks" aria-hidden="true"></g><path class="trk" d="${path}"/>${zones}${marks}` +
       `<g class="needle" transform="rotate(${startAngle} 100 ${cy})"><line class="nd" x1="100" y1="${needleStart}" x2="100" y2="${needleTip}"/></g>` +
       `${spec ? "" : `<circle cx="100" cy="${cy}" r="6" fill="#fff"/>`}` +
       `<text class="lim min-label" x="${lx.toFixed(1)}" y="${(ly + labelOffset).toFixed(1)}">${g.min}</text>` +
@@ -178,6 +165,7 @@
     g.el = el; g.needle = el.querySelector(".needle"); g.valEl = el.querySelector(".val");
     g.pkEl = el.querySelector(".pk"); g.mnEl = el.querySelector(".mn"); g.trEl = el.querySelector(".trend");
     g.minEl = el.querySelector(".min-label"); g.maxEl = el.querySelector(".max-label"); g.coolTick = el.querySelector(".cooltick");
+    g.tickEls = el.querySelector(".ticks");
     g.zoneEls = Object.fromEntries(Array.from(el.querySelectorAll("[data-zone]"), zone => [zone.dataset.zone, zone]));
     updateGaugeLimits(g);
     if (g.key === "egt") egtTile = el;
@@ -241,10 +229,10 @@
     const alarmsEnabled = gauge.key !== "oil" || oilArm.armed;
     const severity = alarmsEnabled ? level(gauge, value) : 0;
     status[gauge.key] = severity;
-    gauge.el.classList.remove("ca", "al", "na");
-    if (severity === 1) gauge.el.classList.add("ca");
-    else if (severity === 2) gauge.el.classList.add("al");
-    if (!alarmsEnabled) gauge.el.classList.add("na");
+    applySeverity(gauge.el, severity, {
+      clear: ["ca", "al", "na"],
+      extras: alarmsEnabled ? [] : ["na"],
+    });
 
     setMarker(gauge.pkEl, gauge, ext[gauge.key].max);
     if (gauge.mnEl) setMarker(gauge.mnEl, gauge, ext.oil.min);
@@ -260,8 +248,11 @@
     batteryVoltage.textContent = isFinite(value) ? value.toFixed(1) + " V" : "--.- V";
     const severity = isFinite(value) ? level(gauge, value) : 0;
     status.battery = severity;
-    const state = isFinite(value) ? ["ok", "ca", "al"][severity] : "unknown";
-    batteryIndicator.setAttribute("class", "indicator " + state + (severity === 2 ? " flash" : ""));
+    applySeverity(batteryIndicator, severity, {
+      clear: ["ok", "ca", "al", "unknown", "flash"],
+      unavailable: !isFinite(value),
+      extras: severity === 2 ? ["flash"] : [],
+    });
   }
 
   function renderLevel(now) {
@@ -271,8 +262,11 @@
     const value = parseFloat(raw);
     const lowCoolant = levelDb.update(now, isFinite(value) && levelBad(value));
     status.level = lowCoolant ? 2 : 0;
-    const state = !isFinite(value) ? "unknown" : lowCoolant ? "al flash" : "ok";
-    levelIndicator.setAttribute("class", "indicator " + state);
+    applySeverity(levelIndicator, lowCoolant ? 2 : 0, {
+      clear: ["ok", "ca", "al", "unknown", "flash"],
+      unavailable: !isFinite(value),
+      extras: lowCoolant ? ["flash"] : [],
+    });
   }
 
   function renderCool(stale) {
@@ -298,15 +292,13 @@
     renderBattery();
     renderLevel(now);
     renderCool(false);
-    // combo tile border follows the worst of coolant, oil and level; EGT tile follows EGT
-    const sev = Math.max(status.coolant, status.oil, status.level);
-    comboTile.classList.toggle("alert-ca", sev === 1);
-    comboTile.classList.toggle("alert-al", sev === 2);
-    if (egtTile) {
-      egtTile.classList.remove("ca", "al");
-      if (status.egt === 1) egtTile.classList.add("ca");
-      else if (status.egt === 2) egtTile.classList.add("al");
-    }
+    // The combo tile border follows the worst reading shown on it.
+    const sev = Math.max(status.coolant, status.oil, status.level, status.battery);
+    applySeverity(comboTile, sev, {
+      clear: ["alert-ca", "alert-al"],
+      classes: { normal: "", caution: "alert-ca", alarm: "alert-al" },
+    });
+    if (egtTile) applySeverity(egtTile, status.egt, { clear: ["ca", "al"] });
   }
   function fmtClock(v) {
     const s = String(v); if (s.indexOf(":") >= 0) return s;
@@ -424,47 +416,6 @@
   }
 
   // ================================================================ logging (IndexedDB, falls back to memory)
-  function makeIdbStore(dbName) {
-    let dbp = null;
-    const open = () => dbp || (dbp = new Promise((res, rej) => {
-      if (!window.indexedDB) return rej(new Error("no indexedDB"));
-      const r = indexedDB.open(dbName, 1);
-      r.onupgradeneeded = () => { const db = r.result; db.createObjectStore("sessions", { keyPath: "id", autoIncrement: true }); db.createObjectStore("rows", { autoIncrement: true }).createIndex("sid", "sid"); };
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("db blocked"));
-    }));
-    const run = (stores, mode, fn) => open().then(db => new Promise((res, rej) => {
-      const t = db.transaction(stores, mode); let out;
-      try { out = fn(t); } catch (e) { try { t.abort(); } catch (_) {} return rej(e); }
-      t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error("aborted"));
-    }));
-    return {
-      probe: () => open().then(() => true),
-      newSession: (start, tripId) => run(["sessions"], "readwrite", t => t.objectStore("sessions").add({ start, end: start, rows: 0, tripId })).then(rq => rq.result),
-      appendRows: (sid, rows) => run(["sessions", "rows"], "readwrite", t => {
-        const rs = t.objectStore("rows"); rows.forEach(r => rs.add(Object.assign({ sid }, r)));
-        const ss = t.objectStore("sessions"), g = ss.get(sid);
-        g.onsuccess = () => { const s = g.result; if (s) { s.end = rows[rows.length - 1].t; s.rows += rows.length; ss.put(s); } };
-      }),
-      markSaved: (sid, name) => run(["sessions"], "readwrite", t => { const ss = t.objectStore("sessions"), g = ss.get(sid); g.onsuccess = () => { const x = g.result; if (x) { x.saved = name; ss.put(x); } }; }),
-      listSessions: () => run(["sessions"], "readonly", t => t.objectStore("sessions").getAll()).then(rq => rq.result.sort((a, b) => b.id - a.id)),
-      getRows: sid => run(["rows"], "readonly", t => t.objectStore("rows").index("sid").getAll(sid)).then(rq => rq.result),
-      prune: () => Promise.resolve(),
-      clear: () => run(["sessions", "rows"], "readwrite", t => { t.objectStore("sessions").clear(); t.objectStore("rows").clear(); }),
-    };
-  }
-  function makeMemStore() {
-    let sessions = [], rows = {}, nid = 1; const P = v => Promise.resolve(v);
-    return {
-      probe: () => P(true),
-      newSession: (start, tripId) => { const id = nid++; sessions.push({ id, start, end: start, rows: 0, tripId }); rows[id] = []; return P(id); },
-      appendRows: (sid, rs) => { rs.forEach(r => rows[sid].push(Object.assign({ sid }, r))); const s = sessions.find(x => x.id === sid); if (s) { s.end = rs[rs.length - 1].t; s.rows += rs.length; } return P(); },
-      markSaved: (sid, name) => { const x = sessions.find(v => v.id === sid); if (x) x.saved = name; return P(); },
-      listSessions: () => P(sessions.slice().sort((a, b) => b.id - a.id)),
-      getRows: sid => P(rows[sid] || []),
-      prune: () => P(),
-      clear: () => { sessions = []; rows = {}; return P(); },
-    };
-  }
   let logStore = null, logBackend = "starting…";
   const storeReady = (async () => {
     try { const s = makeIdbStore(demo ? "pocco-log-demo" : "pocco-log"); await s.probe(); logStore = s; logBackend = "Saved in this browser" + (demo ? " (demo logs are kept separate from real ones)" : "") + "."; }
@@ -876,185 +827,26 @@
   $("themeBtn").onclick = () => { const o = ["auto", "day", "night"]; SET.theme = o[(o.indexOf(SET.theme) + 1) % 3]; store.set("settings", JSON.stringify(SET)); applyTheme(); };
   applyTheme();
 
-  // ================================================================ Menu panel
-  function buildEditors() {
-    const box = $("limits"); box.innerHTML = "";
-    Object.keys(G).forEach(k => {
-      const g = G[k], row = document.createElement("div"); row.className = "lrow";
-      row.innerHTML = `<b>${g.name} (${g.unit})</b>` +
-        FIELDS.filter(f => !(g.noDial && (f === "min" || f === "max"))).map(f =>
-          `<label>${LABELS[f]}<input type="number" step="any" inputmode="decimal" data-g="${k}" data-f="${f}" value="${g[f] == null ? "" : g[f]}"></label>`).join("");
-      box.appendChild(row);
-    });
-    const ob = $("others"); ob.innerHTML = "";
-    const row = document.createElement("div"); row.className = "lrow";
-    row.innerHTML = OTHER.map(([k, lab]) => `<label>${lab}<input type="number" step="any" inputmode="decimal" data-s="${k}" value="${SET[k] == null ? "" : SET[k]}"></label>`).join("");
-    ob.appendChild(row);
-  }
-  function previewThresholds() {
-    Object.keys(G).forEach(k => {
-      const g = G[k];
-      const inputValue = field => {
-        const input = $("limits").querySelector(`input[data-g="${k}"][data-f="${field}"]`);
-        return input ? parseFloat(input.value) : NaN;
-      };
-      const min = inputValue("min"), max = inputValue("max");
-      if (!g.noDial && isFinite(min) && isFinite(max) && max > min) {
-        g.min = min;
-        g.max = max;
-      }
-      FIELDS.filter(f => f !== "min" && f !== "max").forEach(f => {
-        const n = inputValue(f);
-        g[f] = isFinite(n) ? n : null;
-      });
-      if (g.zoneEls) updateGaugeLimits(g);
-    });
-    renderAll(Date.now());
-  }
-  function readEditors() {
-    const lim = {}; let err = "";
-    Object.keys(G).forEach(k => { lim[k] = {}; });
-    $("limits").querySelectorAll("input").forEach(i => { const n = parseFloat(i.value); lim[i.dataset.g][i.dataset.f] = isFinite(n) ? n : null; });
-    Object.keys(G).forEach(k => { if (G[k].noDial) return; const s = lim[k]; if (s.min == null || s.max == null || !(s.max > s.min)) err = G[k].name + ": dial min and max must be set, with max greater than min."; });
-    const st = Object.assign({}, SET);
-    $("others").querySelectorAll("input").forEach(i => {
-      const n = parseFloat(i.value), k = i.dataset.s;
-      if (k === "oilArmCoolantC") st[k] = isFinite(n) ? n : null; else if (isFinite(n) && n >= 0) st[k] = n; else err = err || "Other settings need numbers (zero or more).";
-    });
-    st.autoSave = $("autoSaveIn").checked ? 1 : 0;
-    return { lim, st, err };
-  }
-  function renderMenuInfo() {
-    $("lightInfo").textContent = "Light sensor: " + lightState + (lux != null ? " (" + Math.round(lux) + " lux)" : "") +
-      ". The Auto/Day/Night button in the top bar cycles the mode. Auto only changes this page's colours when the sensor works, otherwise it stays Day. Your phone's own auto-brightness controls the screen backlight.";
-    $("gpsInfo").textContent = "GPS: " + gpsState + (gpsMsg && gpsState !== "fix" ? " (" + gpsMsg + ")" : "") +
-      ". Browsers usually ask for location permission once and may need a secure page (https or localhost) to allow it.";
-  }
-  function renderDebug() {
-    $("unk").textContent = Object.keys(unknown).length ? Object.keys(unknown).map(k => "id " + k + ": " + JSON.stringify(unknown[k])).join("\n") : "none yet";
-    $("cmds").textContent = Object.keys(cmds).length ? Object.keys(cmds).map(k => k + ": " + cmds[k]).join("\n") : "none yet";
-    const t = $("raw"); t.value = rawLog.join("\n"); t.scrollTop = t.scrollHeight;
-  }
-  buildEditors();
-  $("urlIn").value = url; $("demoIn").checked = demo; $("autoSaveIn").checked = !!SET.autoSave;
-  if ($("wifiSsidIn")) $("wifiSsidIn").value = wifiSsid;
-  if ($("wifiPassIn")) $("wifiPassIn").value = wifiPass;
-  if ($("wifiAutoIn")) $("wifiAutoIn").checked = wifiAuto;
-  if ($("wifiAutoIn")) $("wifiAutoIn").onchange = () => {
-    store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
-    store.set("wifiPass", $("wifiPassIn").value);
-    store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
-    applyWifiConnect();
-  };
-  $("demoIn").onchange = () => {
-    store.set("demo", $("demoIn").checked ? "1" : "0");
-    location.reload();
-  };
-  $("menuBtn").onclick = () => {
-    buildEditors();
-    renderDebug();
-    renderMenuInfo();
-    renderSessions();
-    $("panel").classList.add("open");
-    refreshOutputFolder();
-  };
-  $("limits").addEventListener("input", previewThresholds);
-  $("closeBtn").onclick = () => {
-    const result = readEditors();
-    if (!result.err) {
-      store.set("limits", JSON.stringify(result.lim));
-      store.set("settings", JSON.stringify(result.st));
-    }
-    if ($("wifiSsidIn")) {
-      const ssid = $("wifiSsidIn").value.trim() || DEFAULT_SSID;
-      const password = $("wifiPassIn").value;
-      const auto = $("wifiAutoIn").checked ? "1" : "0";
-      const changed = ssid !== store.get("wifiSsid", DEFAULT_SSID) ||
-        password !== store.get("wifiPass", "") || auto !== store.get("wifiAuto", "1");
-      store.set("wifiSsid", ssid);
-      store.set("wifiPass", password);
-      store.set("wifiAuto", auto);
-      if (changed) applyWifiConnect();
-    }
-    $("panel").classList.remove("open");
-  };
-  $("chooseFolderBtn").onclick = async () => {
-    try {
-      const result = await callNative("OutputFolder", "chooseFolder", {});
-      if (result.cancelled) return;
-      await refreshOutputFolder();
-      exportMsg("CSV output folder set to " + result.name + ".");
-    } catch (e) {
-      $("outputFolderInfo").textContent = "Folder selection failed: " + ((e && e.message) || e);
-      $("outputFolderInfo").style.color = "var(--al)";
-    }
-  };
-  $("documentsFolderBtn").onclick = async () => {
-    try {
-      await callNative("OutputFolder", "clearFolder", {});
-      await refreshOutputFolder();
-      exportMsg("CSV output folder reset to Documents.");
-    } catch (e) {
-      $("outputFolderInfo").textContent = "Could not reset output folder: " + ((e && e.message) || e);
-      $("outputFolderInfo").style.color = "var(--al)";
-    }
-  };
-  $("saveBtn").onclick = () => {
-    const result = readEditors();
-    if (result.err) {
-      $("limErr").textContent = result.err;
-      return;
-    }
-    store.set("limits", JSON.stringify(result.lim));
-    store.set("settings", JSON.stringify(result.st));
-    store.set("url", $("urlIn").value.trim() || DEFAULT_URL);
-    store.set("demo", $("demoIn").checked ? "1" : "0");
-    if ($("wifiSsidIn")) {
-      store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
-      store.set("wifiPass", $("wifiPassIn").value);
-      store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
-    }
-    location.reload();
-  };
-  $("resetBtn").onclick = () => {
-    store.del("url");
-    $("urlIn").value = DEFAULT_URL;
-  };
-  $("resetLimBtn").onclick = () => {
-    store.del("limits");
-    store.del("settings");
-    location.reload();
-  };
-  $("gpsBtn").onclick = () => {
-    startGps();
-    setTimeout(renderMenuInfo, 1500);
-  };
-  $("sessions").onclick = event => {
-    const button = event.target.closest("button[data-sid]");
-    if (button) exportCsv(+button.dataset.sid, button.dataset.how);
-  };
-  $("delLogsBtn").onclick = async () => {
-    if (!confirm("Delete ALL logged sessions on this device?")) return;
-    await log.flush();
-    await logStore.clear();
-    log.sid = null;
-    log.needNew = true;
-    renderSessions();
-  };
-  $("pauseBtn").onclick = () => {
-    paused = !paused;
-    $("pauseBtn").textContent = paused ? "Resume log" : "Pause log";
-  };
-  $("copyBtn").onclick = () => {
-    const rawText = $("raw");
-    rawText.select();
-    try {
-      (navigator.clipboard ? navigator.clipboard.writeText(rawText.value) : Promise.reject())
-        .catch(() => document.execCommand("copy"));
-    } catch (error) {
-      document.execCommand("copy");
-    }
-  };
+  const menu = createMenu({
+    config: { G, FIELDS, LABELS, OTHER, SET, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid, wifiPass, wifiAuto },
+    store,
+    state: {
+      getMenuInfo: () => ({ lightState, lux, gpsState, gpsMsg }),
+      getDebugInfo: () => ({ unknown, cmds, rawLog }),
+      isPaused: () => paused,
+      setPaused: value => { paused = value; },
+    },
+    actions: {
+      updateGaugeLimits, renderAll, applyWifiConnect, renderSessions, refreshOutputFolder,
+      callNative, exportMsg, startGps, exportCsv,
+      clearLogs: async () => {
+        await log.flush();
+        await logStore.clear();
+        log.sid = null;
+        log.needNew = true;
+      },
+    },
+  });
   // tap a gauge tile to clear its peak/low markers
   comboTile.addEventListener("click", () => {
     ["coolant", "oil"].forEach(key => {
@@ -1104,7 +896,7 @@
 
     setWakeLock(demo || sessionOpen);
 
-    if ($("panel").classList.contains("open")) renderDebug();
+    if ($("panel").classList.contains("open")) menu.renderDebug();
   }, 1000);
   setInterval(() => {
     const now = Date.now();

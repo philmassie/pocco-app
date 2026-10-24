@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0d10">
 <title>Pocco Display</title>
 <style>
-:root{--bg:#0b0d10;--card:#151a20;--fg:#e8edf2;--mut:#7d8895;--ok:#4cc38a;--ca:#f2b705;--al:#ff4d4d;--trk:#2a323b;--cy:#5ec8ff;--lilac:#b79cff}
+:root{--bg:#0b0d10;--card:#151a20;--fg:#e8edf2;--mut:#7d8895;--mut-icon:#323941;--ok:#4cc38a;--ca:#f2b705;--al:#ff4d4d;--trk:#2a323b;--cy:#5ec8ff;--lilac:#b79cff;--alarm-flash-timing:.6s steps(2) infinite}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
 #app{display:flex;flex-direction:column;height:100%}
@@ -26,6 +26,9 @@ button{background:#1d242c;color:var(--fg);border:0;border-radius:6px;padding:5px
 @media (min-aspect-ratio:3/2){.tile.egt{height:calc(min(100%,calc((100vw - 24px)/2),calc(100vh - 80px)) - 10px)}}
 .tile>svg{flex:1;min-height:0;width:100%}
 .tile.combo>svg{flex:0 1 auto;align-self:center;aspect-ratio:1;height:auto;min-width:0;width:100%}
+.combo-gauge,.indicator,.tile.egt{--severity-color:var(--mut-icon);color:var(--severity-color)}
+.combo-gauge.ca,.indicator.ca,.tile.egt.ca{--severity-color:var(--ca);color:var(--severity-color)}
+.combo-gauge.al,.indicator.al,.tile.egt.al{--severity-color:var(--al);color:var(--severity-color)}
 .combo-gauge.ca .val{fill:var(--ca)}
 .combo-gauge.al .val{fill:var(--al)}
 .combo-gauge.na .val{fill:var(--mut)}
@@ -34,48 +37,19 @@ button{background:#1d242c;color:var(--fg);border:0;border-radius:6px;padding:5px
 .combo-gauge .unit{font-size:8px}
 .tile.egt .val{font-size:17px}
 .tile.egt .unit{font-size:8px}
+.tile.egt .nm{fill:var(--severity-color)}
+.tile.egt.al .nm{animation:ifl var(--alarm-flash-timing)}
 .combo-divider{stroke:var(--mut);stroke-width:1;opacity:.28}
-.coolant-symbol{fill:var(--trk)}
-.coolant-thermometer,.coolant-bulb{fill:var(--trk)}
-.coolant-ticks,.coolant-waves{fill:none;stroke:var(--trk);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.dial-coolant-icon{opacity:.28}
-.dial-coolant-icon .coolant-thermometer,.dial-coolant-icon .coolant-bulb{fill:var(--mut)}
-.dial-coolant-icon .coolant-ticks,.dial-coolant-icon .coolant-waves{stroke:var(--mut)}
-.dial-oil-icon{overflow:visible;color:var(--mut);opacity:.28}
-.combo-gauge.ca .dial-coolant-icon,.combo-gauge.ca .dial-oil-icon{opacity:1}
-.combo-gauge.ca .dial-coolant-icon .coolant-thermometer,.combo-gauge.ca .dial-coolant-icon .coolant-bulb{fill:var(--ca)}
-.combo-gauge.ca .dial-coolant-icon .coolant-ticks,.combo-gauge.ca .dial-coolant-icon .coolant-waves{stroke:var(--ca)}
-.combo-gauge.ca .dial-oil-icon{color:var(--ca)}
-.combo-gauge.al .dial-coolant-icon,.combo-gauge.al .dial-oil-icon{opacity:1}
-.combo-gauge.al .dial-coolant-icon .coolant-thermometer,.combo-gauge.al .dial-coolant-icon .coolant-bulb{fill:var(--al)}
-.combo-gauge.al .dial-coolant-icon .coolant-ticks,.combo-gauge.al .dial-coolant-icon .coolant-waves{stroke:var(--al)}
-.combo-gauge.al .dial-oil-icon{color:var(--al)}
-.indicator.ok .coolant-thermometer,.indicator.ok .coolant-bulb{fill:var(--ok)}
-.indicator.ok .coolant-ticks,.indicator.ok .coolant-waves{stroke:var(--ok)}
-.indicator.ca .coolant-thermometer,.indicator.ca .coolant-bulb{fill:var(--ca)}
-.indicator.ca .coolant-ticks,.indicator.ca .coolant-waves{stroke:var(--ca)}
-.indicator.al .coolant-thermometer,.indicator.al .coolant-bulb{fill:var(--al)}
-.indicator.al .coolant-ticks,.indicator.al .coolant-waves{stroke:var(--al)}
-.indicator.ok .coolant-symbol{fill:var(--ok)}
-.indicator.ca .coolant-symbol{fill:var(--ca)}
-.indicator.al .coolant-symbol{fill:var(--al)}
-.battery-outline,.battery-mark{fill:none;stroke:var(--trk);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.battery-terminal{fill:var(--trk)}
-.indicator.ok .battery-outline,.indicator.ok .battery-mark{stroke:var(--ok)}
-.indicator.ok .battery-terminal{fill:var(--ok)}
-.indicator.ca .battery-outline,.indicator.ca .battery-mark{stroke:var(--ca)}
-.indicator.ca .battery-terminal{fill:var(--ca)}
-.indicator.al .battery-outline,.indicator.al .battery-mark{stroke:var(--al)}
-.indicator.al .battery-terminal{fill:var(--al)}
-.indicator.flash{animation:ifl .6s steps(2) infinite}
+.dial-coolant-icon{opacity:1}
+.dial-oil-icon{overflow:visible;color:var(--severity-color);opacity:1}
+.combo-gauge.al .dial-coolant-icon,.combo-gauge.al .dial-oil-icon,.indicator.flash{animation:ifl var(--alarm-flash-timing)}
 @keyframes ifl{50%{opacity:.25}}
 .battery-voltage{fill:var(--mut);font-size:7px;font-variant-numeric:tabular-nums;text-anchor:middle}
-.tile.combo.alert-ca{border-color:var(--ca)}
-.tile.combo.alert-al{border-color:var(--al);animation:fl .6s steps(2) infinite}
-.tile.ca{border-color:var(--ca)}
-.tile.al{border-color:var(--al);animation:fl .6s steps(2) infinite}
+.tile.combo.alert-ca,.tile.ca{border-color:var(--ca)}
+.tile.combo.alert-al,.tile.al{border-color:var(--al);animation:fl var(--alarm-flash-timing)}
 @keyframes fl{50%{background:#3a1515}}
 .trk{fill:none;stroke:var(--ok);stroke-width:10}
+.ticks line{stroke:var(--mut);stroke-width:1.2;stroke-linecap:round}
 .z{fill:none;stroke-width:10}
 .z.ca{stroke:var(--ca)}.z.al{stroke:var(--al)}
 .nd{stroke:#fff;stroke-width:3;stroke-linecap:round}
@@ -202,6 +176,6 @@ body.stale .tile{opacity:.3}
 
 <script src="msgpack.js"></script>
 <script src="logic.js"></script>
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
