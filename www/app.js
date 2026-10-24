@@ -18,7 +18,7 @@ import { createWifiController } from "./modules/wifi.mjs";
     del(k) { try { localStorage.removeItem(k); } catch (e) {} },
   };
   const {
-    demo, DEFAULT_URL, url, DEFAULT_SSID, wifiSsid, wifiPass, wifiAuto,
+    demo, DEFAULT_URL, url, DEFAULT_SSID, wifiSsid,
     IDS, KNOWN, G, GAUGES, FIELDS, LABELS, SET, OTHER, levelBad,
   } = createAppConfig(store, location.search);
 
@@ -672,11 +672,7 @@ import { createWifiController } from "./modules/wifi.mjs";
     native,
     demo,
     capacitor: Cap,
-    getSettings: () => ({
-      ssid: (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim(),
-      password: $("wifiPassIn") ? $("wifiPassIn").value : wifiPass,
-      auto: store.get("wifiAuto", "1") === "1",
-    }),
+    getSsid: () => (($("wifiSsidIn") ? $("wifiSsidIn").value.trim() : wifiSsid) || DEFAULT_SSID).trim(),
     callNative,
     connect,
     stopSocket,
@@ -752,10 +748,10 @@ import { createWifiController } from "./modules/wifi.mjs";
   applyTheme();
 
   const menu = createMenu({
-    config: { G, FIELDS, LABELS, OTHER, SET, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid, wifiPass, wifiAuto },
+    config: { G, FIELDS, LABELS, OTHER, SET, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid },
     store,
     state: {
-      getMenuInfo: () => ({ lightState, lux, gpsState, gpsMsg }),
+      getMenuInfo: () => ({ gpsState, gpsMsg }),
       getDebugInfo: () => ({ unknown, cmds, rawLog }),
       isPaused: () => paused,
       setPaused: value => { paused = value; },

@@ -83,9 +83,21 @@ body.stale .tile{opacity:.3}
 #panel input[type=text]{width:100%;padding:8px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
 #panel textarea,#panel pre{width:100%;height:160px;background:#10151a;color:#9fb0c0;border:1px solid #2a323b;border-radius:6px;font:11px/1.4 ui-monospace,monospace;padding:8px;white-space:pre-wrap;margin:0;overflow:auto}
 #panel .row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+#panel .topRow{justify-content:space-between}
+#panel .topRow label{margin-left:auto}
+#urlRow input{flex:1;min-width:0}
 #panel .credit{margin:14px 0 0;color:var(--mut);font-size:11px}
+.limitGroup{margin:8px 0;background:#10151a;border:1px solid #2a323b;border-radius:8px;overflow:hidden}
+.limitGroup summary{padding:10px;cursor:pointer;font-size:14px;font-weight:600;background:#161c22}
+.limitGroup[open] summary{border-bottom:1px solid #2a323b}
+.limitContent{padding:8px}
+.limitContent>button{margin:0 0 8px}
+.limitFields{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.limitFields label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);flex:1 0 90px}
+.limitFields input[type=number]{width:100%;padding:6px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
+.limitFields .settingCheckbox{flex:1 0 100%;flex-direction:row;align-items:center;gap:6px}
+.limitFields .settingCheckbox input{width:auto}
 .lrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:10px 0;padding:8px;background:#10151a;border-radius:8px}
-.lrow b{flex:1 0 100%;font-size:14px}
 .lrow label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);flex:1 0 90px}
 .lrow input{width:100%;padding:6px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
 .srow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;margin:6px 0;background:#10151a;border-radius:8px;font-size:12px}
@@ -106,56 +118,58 @@ body.stale .tile{opacity:.3}
 </div>
 
 <div id="panel">
-  <div class="row"><button id="closeBtn">Close</button></div>
-
-  <h3>Connection</h3>
-  <input type="text" id="urlIn" spellcheck="false" autocapitalize="off">
-  <div class="row">
+  <div class="row topRow">
+    <button id="closeBtn">Close</button>
     <label><input type="checkbox" id="demoIn"> Demo mode</label>
   </div>
 
-  <div id="wifiSection" style="margin-top:10px;padding:8px;background:#10151a;border-radius:8px">
-    <div style="font-size:12px;font-weight:600;color:var(--mut);margin-bottom:6px">POCCO Wi-Fi connection (Android App)</div>
-    <div class="row" style="margin-top:4px">
-      <label style="flex:1"><span style="font-size:11px;color:var(--mut)">Wi-Fi SSID:</span>
+  <details class="limitGroup" id="poccoSettings">
+    <summary>POCCO Settings</summary>
+    <div class="limitContent">
+      <label style="display:block">URL
+        <div class="row" id="urlRow">
+          <input type="text" id="urlIn" spellcheck="false" autocapitalize="off">
+          <button id="resetBtn" type="button">Restore default</button>
+        </div>
+      </label>
+      <label style="display:block;margin-top:10px">Wi-Fi SSID name
         <input type="text" id="wifiSsidIn" placeholder="e.g. POCCO-AP" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
       </label>
-      <label style="flex:1"><span style="font-size:11px;color:var(--mut)">Password (optional):</span>
-        <input type="password" id="wifiPassIn" placeholder="Password" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
-      </label>
+      <p style="font-size:11px;color:var(--mut);margin:4px 0">The phone controls Wi-Fi and must already be connected to this network. The app will not search for or switch to it.</p>
+      <p id="wifiStatusInfo" style="font-size:11px;color:var(--mut);margin:4px 0 0"></p>
     </div>
-    <div class="row" style="margin-top:6px">
-      <label><input type="checkbox" id="wifiAutoIn"> App requests POCCO Wi-Fi (enabled by default)</label>
-    </div>
-    <p style="font-size:11px;color:var(--mut);margin:4px 0">On: Android may ask you to approve the first connection; the app retries for up to 5 minutes. Off: the app never switches Wi-Fi and only works while the phone is already connected to this network.</p>
-    <p id="wifiStatusInfo" style="font-size:11px;color:var(--mut);margin:4px 0 0"></p>
-  </div>
+  </details>
 
-  <h3>Dial limits (changes preview on the gauges; Save &amp; reload keeps them). Colour zones are for this page only; the POCCO+ alarms are set on the device. Leave a limit blank to skip it.</h3>
+  <h3>Dial limits (changes preview on the gauges; Save &amp; reload keeps them). Colour zones are for this page only; the POCCO+ alarms are set on the device. Leave a limit blank to skip it. Tap a gauge to expand its limits.</h3>
   <div id="limits"></div>
 
   <h3>Other settings</h3>
   <div id="others"></div>
-  <div class="row"><label><input type="checkbox" id="autoSaveIn"> Auto-save a CSV to the selected output folder when a log ends (Android app only)</label></div>
-  <div class="row" id="outputFolderRow" style="display:none">
-    <button id="chooseFolderBtn">Choose output folder</button>
-    <button id="documentsFolderBtn">Use Documents</button>
-    <span id="outputFolderInfo" style="font-size:12px;color:var(--mut)"></span>
-  </div>
 
   <div class="row">
     <button id="saveBtn">Save &amp; reload</button>
-    <button id="resetBtn">Reset URL</button>
-    <button id="resetLimBtn">Reset limits &amp; settings</button>
     <span id="limErr" style="color:var(--al);font-size:12px"></span>
   </div>
-
-  <h3>Display</h3>
-  <p id="lightInfo"></p>
 
   <h3>GPS</h3>
   <p id="gpsInfo"></p>
   <div class="row"><button id="gpsBtn">(Re)start GPS</button></div>
+
+  <h3>Logging settings</h3>
+  <details class="limitGroup" id="loggingSettings">
+    <summary>Automatic saving and output folder</summary>
+    <div class="limitContent">
+      <button type="button" data-reset-logging>Restore defaults</button>
+      <div class="limitFields">
+        <label class="settingCheckbox"><input type="checkbox" id="autoSaveIn"> Auto-save a CSV to the selected output folder when a log ends (Android app only)</label>
+      </div>
+      <div class="row" id="outputFolderRow" style="display:none">
+        <button id="chooseFolderBtn">Choose output folder</button>
+        <button id="documentsFolderBtn">Use Documents</button>
+        <span id="outputFolderInfo" style="font-size:12px;color:var(--mut)"></span>
+      </div>
+    </div>
+  </details>
 
   <h3>Logs (one CSV per session, newest first)</h3>
   <p id="logBackend"></p>

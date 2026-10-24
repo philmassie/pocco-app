@@ -20,6 +20,9 @@ async function main() {
   assert.strictEqual(config.G.coolant.cautionHi, 92);
   assert.strictEqual(config.G.coolant.tickStep, 20);
   assert.strictEqual(config.G.egt.tickStep, 200);
+  assert.strictEqual(config.DEFAULT_G.oil.max, 7);
+  assert.strictEqual(config.G.oil.max, 8);
+  assert.strictEqual(config.DEFAULT_SETTINGS.autoSave, 1);
   assert.strictEqual(config.SET.theme, "night");
   assert.strictEqual(config.SET.autoSave, 0);
   assert.deepStrictEqual(config.GAUGES.map(gauge => gauge.key), ["oil", "coolant", "egt"]);
@@ -57,7 +60,7 @@ async function main() {
   assert.deepStrictEqual(await logs.listSessions(), []);
 
   const wifiCalls = [];
-  let wifiConnected = false;
+  let currentNetwork = { isWifi: false, ssid: "" };
   let connectCount = 0;
   let stopCount = 0;
   let wifiChanged;
@@ -65,11 +68,10 @@ async function main() {
     native: true,
     demo: false,
     capacitor: { Plugins: { WifiConnect: { addListener: (eventName, callback) => { wifiChanged = callback; } } } },
-    getSettings: () => ({ ssid: "POCCO", password: "", auto: true }),
+    getSsid: () => "POCCO",
     callNative: async (plugin, method) => {
       wifiCalls.push(method);
-      if (method === "requestNetwork") return { requested: true };
-      if (method === "getRequestStatus") return { requested: true, connected: wifiConnected, ssid: "POCCO" };
+      if (method === "useCurrentNetwork") return { connected: currentNetwork.isWifi && currentNetwork.ssid === "POCCO", ssid: currentNetwork.ssid };
       throw new Error("Unexpected native Wi-Fi method: " + method);
     },
     connect: () => { connectCount++; },
@@ -78,24 +80,24 @@ async function main() {
     setWifiInfo: () => {},
   });
   await wifiController.start();
-  assert.deepStrictEqual(wifiCalls, ["requestNetwork", "getRequestStatus"]);
+  assert.deepStrictEqual(wifiCalls, ["useCurrentNetwork"]);
   assert.strictEqual(connectCount, 0);
-  wifiConnected = true;
+  currentNetwork = { isWifi: true, ssid: "POCCO" };
   await wifiChanged();
   assert.strictEqual(connectCount, 1);
   assert.strictEqual(stopCount, 1);
 
   let selectedNetwork = { isWifi: true, ssid: "Home Wi-Fi" };
   let manualConnectCount = 0;
-  let manualRequestCount = 0;
   const manualWifiController = createWifiController({
     native: true,
     demo: false,
     capacitor: { Plugins: { WifiConnect: { addListener: (eventName, callback) => { wifiChanged = callback; } } } },
-    getSettings: () => ({ ssid: "POCCO", password: "", auto: false }),
+    getSsid: () => "POCCO",
     callNative: async (plugin, method) => {
-      if (method === "getCurrentNetwork") return selectedNetwork;
-      if (method === "requestNetwork") manualRequestCount++;
+      if (method === "useCurrentNetwork") {
+        return { connected: selectedNetwork.isWifi && selectedNetwork.ssid.toLowerCase() === "pocco", ssid: selectedNetwork.ssid };
+      }
       throw new Error("Unexpected native Wi-Fi method: " + method);
     },
     connect: () => { manualConnectCount++; },
@@ -108,7 +110,7 @@ async function main() {
   selectedNetwork = { isWifi: true, ssid: "POCCO" };
   await wifiChanged();
   assert.strictEqual(manualConnectCount, 1);
-  assert.strictEqual(manualRequestCount, 0);
+  assert.deepStrictEqual(wifiCalls, ["useCurrentNetwork", "useCurrentNetwork"]);
 }
 
 main().then(() => console.log("module tests passed")).catch(error => {

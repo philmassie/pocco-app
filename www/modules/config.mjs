@@ -5,8 +5,6 @@ export function createAppConfig(store, query) {
   const url = store.get("url", DEFAULT_URL);
   const DEFAULT_SSID = "Madman POCCO+";
   const wifiSsid = store.get("wifiSsid", DEFAULT_SSID);
-  const wifiPass = store.get("wifiPass", "");
-  const wifiAuto = store.get("wifiAuto", "1") === "1";
 
   // Widget ids come from your DevTools capture of ws://192.168.4.1/dashws.
   // Limits below are PLACEHOLDERS that only colour the dials; change them in Menu.
@@ -24,10 +22,15 @@ export function createAppConfig(store, query) {
     battery: { id: 6, name: "Battery", unit: "V", min: 8, max: 16, dp: 1, alarmLo: 12, cautionLo: 12.5, cautionHi: 14, alarmHi: 14.5, noDial: true },
   };
   Object.keys(G).forEach(k => { G[k].key = k; });
-  const GAUGES = [G.oil, G.coolant, G.egt];
   const FIELDS = ["min", "max", "alarmLo", "cautionLo", "cautionHi", "alarmHi"];
+  const DEFAULT_G = Object.fromEntries(Object.entries(G).map(([key, gauge]) => [
+    key,
+    Object.fromEntries(FIELDS.map(field => [field, gauge[field] ?? null])),
+  ]));
+  const GAUGES = [G.oil, G.coolant, G.egt];
   const LABELS = { min: "Dial min", max: "Dial max", alarmLo: "Alarm low", cautionLo: "Caution low", cautionHi: "Caution high", alarmHi: "Alarm high" };
   const SET0 = { oilArmBar: 1.0, oilArmSec: 20, oilArmCoolantC: null, levelHoldSec: 2, cooldownC: 200, theme: "auto", autoSave: 1, autoEndSec: 30 };
+  const DEFAULT_SETTINGS = Object.assign({}, SET0);
   const OTHER = [
     ["oilArmBar", "Oil: engine-running level (bar)"],
     ["oilArmSec", "Oil: hold time before armed (s)"],
@@ -49,7 +52,7 @@ export function createAppConfig(store, query) {
   try { Object.assign(SET, JSON.parse(store.get("settings", "{}")) || {}); } catch (e) {}
 
   return {
-    demo, DEFAULT_URL, url, DEFAULT_SSID, wifiSsid, wifiPass, wifiAuto,
-    IDS, KNOWN, G, GAUGES, FIELDS, LABELS, SET, OTHER, levelBad,
+    demo, DEFAULT_URL, url, DEFAULT_SSID, wifiSsid,
+    IDS, KNOWN, G, DEFAULT_G, GAUGES, FIELDS, LABELS, SET, DEFAULT_SETTINGS, OTHER, levelBad,
   };
 }

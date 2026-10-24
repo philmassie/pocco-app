@@ -1,20 +1,28 @@
 export function createMenu({ config, store, state, actions }) {
   const $ = id => document.getElementById(id);
-  const { G, FIELDS, LABELS, OTHER, SET, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid, wifiPass, wifiAuto } = config;
+  const { G, DEFAULT_G, FIELDS, LABELS, OTHER, SET, DEFAULT_SETTINGS, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid } = config;
 
   function buildEditors() {
     const box = $("limits"); box.innerHTML = "";
     Object.keys(G).forEach(k => {
-      const g = G[k], row = document.createElement("div"); row.className = "lrow";
-      row.innerHTML = `<b>${g.name} (${g.unit})</b>` +
+      const g = G[k], group = document.createElement("details");
+      group.className = "limitGroup";
+      group.innerHTML = `<summary>${g.name} (${g.unit})</summary><div class="limitContent">` +
+        `<button type="button" data-reset-gauge="${k}">Restore defaults</button><div class="limitFields">` +
         FIELDS.filter(f => !(g.noDial && (f === "min" || f === "max"))).map(f =>
-          `<label>${LABELS[f]}<input type="number" step="any" inputmode="decimal" data-g="${k}" data-f="${f}" value="${g[f] == null ? "" : g[f]}"></label>`).join("");
-      box.appendChild(row);
+          `<label>${LABELS[f]}<input type="number" step="any" inputmode="decimal" data-g="${k}" data-f="${f}" value="${g[f] == null ? "" : g[f]}"></label>`).join("") +
+        "</div></div>";
+      box.appendChild(group);
     });
-    const ob = $("others"); ob.innerHTML = "";
-    const row = document.createElement("div"); row.className = "lrow";
-    row.innerHTML = OTHER.map(([k, lab]) => `<label>${lab}<input type="number" step="any" inputmode="decimal" data-s="${k}" value="${SET[k] == null ? "" : SET[k]}"></label>`).join("");
-    ob.appendChild(row);
+    const others = $("others"); others.innerHTML = "";
+    const otherGroup = document.createElement("details");
+    otherGroup.className = "limitGroup";
+    otherGroup.innerHTML = `<summary>Other settings</summary><div class="limitContent">` +
+      `<button type="button" data-reset-settings>Restore defaults</button><div class="limitFields">` +
+      OTHER.map(([k, lab]) => `<label>${lab}<input type="number" step="any" inputmode="decimal" data-s="${k}" value="${SET[k] == null ? "" : SET[k]}"></label>`).join("") +
+      "</div></div>";
+    others.appendChild(otherGroup);
+    $("autoSaveIn").checked = !!SET.autoSave;
   }
 
   function previewThresholds() {
@@ -53,7 +61,7 @@ export function createMenu({ config, store, state, actions }) {
       }
     });
     const st = Object.assign({}, SET);
-    $("others").querySelectorAll("input").forEach(i => {
+    $("others").querySelectorAll("input[data-s]").forEach(i => {
       const n = parseFloat(i.value), k = i.dataset.s;
       if (k === "oilArmCoolantC") st[k] = isFinite(n) ? n : null;
       else if (isFinite(n) && n >= 0) st[k] = n;
@@ -63,10 +71,29 @@ export function createMenu({ config, store, state, actions }) {
     return { lim, st, err };
   }
 
+  function restoreGaugeDefaults(key) {
+    const defaults = DEFAULT_G[key];
+    if (!defaults) return;
+    FIELDS.forEach(field => {
+      const input = $("limits").querySelector(`input[data-g="${key}"][data-f="${field}"]`);
+      if (input) input.value = defaults[field] == null ? "" : defaults[field];
+    });
+    previewThresholds();
+  }
+
+  function restoreSettingsDefaults() {
+    OTHER.forEach(([key]) => {
+      const input = $("others").querySelector(`input[data-s="${key}"]`);
+      if (input) input.value = DEFAULT_SETTINGS[key] == null ? "" : DEFAULT_SETTINGS[key];
+    });
+  }
+
+  function restoreLoggingDefaults() {
+    $("autoSaveIn").checked = !!DEFAULT_SETTINGS.autoSave;
+  }
+
   function renderMenuInfo() {
-    const { lightState, lux, gpsState, gpsMsg } = state.getMenuInfo();
-    $("lightInfo").textContent = "Light sensor: " + lightState + (lux != null ? " (" + Math.round(lux) + " lux)" : "") +
-      ". The Auto/Day/Night button in the top bar cycles the mode. Auto only changes this page's colours when the sensor works, otherwise it stays Day. Your phone's own auto-brightness controls the screen backlight.";
+    const { gpsState, gpsMsg } = state.getMenuInfo();
     $("gpsInfo").textContent = "GPS: " + gpsState + (gpsMsg && gpsState !== "fix" ? " (" + gpsMsg + ")" : "") +
       ". Browsers usually ask for location permission once and may need a secure page (https or localhost) to allow it.";
   }
@@ -79,16 +106,8 @@ export function createMenu({ config, store, state, actions }) {
   }
 
   buildEditors();
-  $("urlIn").value = url; $("demoIn").checked = demo; $("autoSaveIn").checked = !!SET.autoSave;
+  $("urlIn").value = url; $("demoIn").checked = demo;
   if ($("wifiSsidIn")) $("wifiSsidIn").value = wifiSsid;
-  if ($("wifiPassIn")) $("wifiPassIn").value = wifiPass;
-  if ($("wifiAutoIn")) $("wifiAutoIn").checked = wifiAuto;
-  if ($("wifiAutoIn")) $("wifiAutoIn").onchange = () => {
-    store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
-    store.set("wifiPass", $("wifiPassIn").value);
-    store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
-    actions.applyWifiConnect();
-  };
   $("demoIn").onchange = () => {
     store.set("demo", $("demoIn").checked ? "1" : "0");
     location.reload();
@@ -102,6 +121,16 @@ export function createMenu({ config, store, state, actions }) {
     actions.refreshOutputFolder();
   };
   $("limits").addEventListener("input", previewThresholds);
+  $("limits").addEventListener("click", event => {
+    const button = event.target.closest("button[data-reset-gauge]");
+    if (button) restoreGaugeDefaults(button.dataset.resetGauge);
+  });
+  $("others").addEventListener("click", event => {
+    if (event.target.closest("button[data-reset-settings]")) restoreSettingsDefaults();
+  });
+  $("loggingSettings").addEventListener("click", event => {
+    if (event.target.closest("button[data-reset-logging]")) restoreLoggingDefaults();
+  });
   $("closeBtn").onclick = () => {
     const result = readEditors();
     if (!result.err) {
@@ -110,13 +139,8 @@ export function createMenu({ config, store, state, actions }) {
     }
     if ($("wifiSsidIn")) {
       const ssid = $("wifiSsidIn").value.trim() || DEFAULT_SSID;
-      const password = $("wifiPassIn").value;
-      const auto = $("wifiAutoIn").checked ? "1" : "0";
-      const changed = ssid !== store.get("wifiSsid", DEFAULT_SSID) ||
-        password !== store.get("wifiPass", "") || auto !== store.get("wifiAuto", "1");
+      const changed = ssid !== store.get("wifiSsid", DEFAULT_SSID);
       store.set("wifiSsid", ssid);
-      store.set("wifiPass", password);
-      store.set("wifiAuto", auto);
       if (changed) actions.applyWifiConnect();
     }
     $("panel").classList.remove("open");
@@ -154,19 +178,12 @@ export function createMenu({ config, store, state, actions }) {
     store.set("demo", $("demoIn").checked ? "1" : "0");
     if ($("wifiSsidIn")) {
       store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
-      store.set("wifiPass", $("wifiPassIn").value);
-      store.set("wifiAuto", $("wifiAutoIn").checked ? "1" : "0");
     }
     location.reload();
   };
   $("resetBtn").onclick = () => {
     store.del("url");
     $("urlIn").value = DEFAULT_URL;
-  };
-  $("resetLimBtn").onclick = () => {
-    store.del("limits");
-    store.del("settings");
-    location.reload();
   };
   $("gpsBtn").onclick = () => {
     actions.startGps();
