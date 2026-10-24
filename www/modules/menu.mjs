@@ -2,6 +2,16 @@ export function createMenu({ config, store, state, actions }) {
   const $ = id => document.getElementById(id);
   const { G, DEFAULT_G, FIELDS, LABELS, OTHER, SET, DEFAULT_SETTINGS, DEFAULT_URL, DEFAULT_SSID, url, demo, wifiSsid } = config;
 
+  function buildPoccoFields() {
+    $("poccoFields").innerHTML = `<div class="limitFields">` +
+      `<button type="button" data-reset-pocco>Restore defaults</button>` +
+      `<label class="poccoField">POCCO URL<input type="text" id="urlIn" spellcheck="false" autocapitalize="off"></label>` +
+      `<label class="poccoField">Wi-Fi SSID name<input type="text" id="wifiSsidIn" placeholder="e.g. POCCO-AP" spellcheck="false" autocapitalize="off"></label>` +
+      "</div>";
+    $("urlIn").value = url;
+    $("wifiSsidIn").value = wifiSsid;
+  }
+
   function buildEditors() {
     const box = $("limits"); box.innerHTML = "";
     Object.keys(G).forEach(k => {
@@ -105,9 +115,14 @@ export function createMenu({ config, store, state, actions }) {
     const t = $("raw"); t.value = rawLog.join("\n"); t.scrollTop = t.scrollHeight;
   }
 
+  buildPoccoFields();
   buildEditors();
-  $("urlIn").value = url; $("demoIn").checked = demo;
-  if ($("wifiSsidIn")) $("wifiSsidIn").value = wifiSsid;
+  $("demoIn").checked = demo;
+  $("poccoFields").addEventListener("click", event => {
+    if (!event.target.closest("button[data-reset-pocco]")) return;
+    $("urlIn").value = DEFAULT_URL;
+    $("wifiSsidIn").value = DEFAULT_SSID;
+  });
   $("demoIn").onchange = () => {
     store.set("demo", $("demoIn").checked ? "1" : "0");
     location.reload();
@@ -180,10 +195,6 @@ export function createMenu({ config, store, state, actions }) {
       store.set("wifiSsid", ($("wifiSsidIn").value.trim() || DEFAULT_SSID));
     }
     location.reload();
-  };
-  $("resetBtn").onclick = () => {
-    store.del("url");
-    $("urlIn").value = DEFAULT_URL;
   };
   $("gpsBtn").onclick = () => {
     actions.startGps();

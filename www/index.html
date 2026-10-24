@@ -85,7 +85,6 @@ body.stale .tile{opacity:.3}
 #panel .row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
 #panel .topRow{justify-content:space-between}
 #panel .topRow label{margin-left:auto}
-#urlRow input{flex:1;min-width:0}
 #panel .credit{margin:14px 0 0;color:var(--mut);font-size:11px}
 .limitGroup{margin:8px 0;background:#10151a;border:1px solid #2a323b;border-radius:8px;overflow:hidden}
 .limitGroup summary{padding:10px;cursor:pointer;font-size:14px;font-weight:600;background:#161c22}
@@ -94,6 +93,8 @@ body.stale .tile{opacity:.3}
 .limitContent>button{margin:0 0 8px}
 .limitFields{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
 .limitFields label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);flex:1 0 90px}
+.limitFields .poccoField{flex:1 0 100%;align-items:stretch}
+.limitFields .poccoField input[type=text]{margin-top:4px}
 .limitFields input[type=number]{width:100%;padding:6px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;font-size:15px}
 .limitFields .settingCheckbox{flex:1 0 100%;flex-direction:row;align-items:center;gap:6px}
 .limitFields .settingCheckbox input{width:auto}
@@ -126,15 +127,7 @@ body.stale .tile{opacity:.3}
   <details class="limitGroup" id="poccoSettings">
     <summary>POCCO Settings</summary>
     <div class="limitContent">
-      <label style="display:block">URL
-        <div class="row" id="urlRow">
-          <input type="text" id="urlIn" spellcheck="false" autocapitalize="off">
-          <button id="resetBtn" type="button">Restore default</button>
-        </div>
-      </label>
-      <label style="display:block;margin-top:10px">Wi-Fi SSID name
-        <input type="text" id="wifiSsidIn" placeholder="e.g. POCCO-AP" spellcheck="false" autocapitalize="off" style="padding:6px;font-size:14px;background:#1d242c;color:var(--fg);border:1px solid #333;border-radius:6px;width:100%">
-      </label>
+      <div id="poccoFields"></div>
       <p style="font-size:11px;color:var(--mut);margin:4px 0">The phone controls Wi-Fi and must already be connected to this network. The app will not search for or switch to it.</p>
       <p id="wifiStatusInfo" style="font-size:11px;color:var(--mut);margin:4px 0 0"></p>
     </div>
